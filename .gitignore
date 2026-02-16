@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .idea/
+Pokemon_Sprites_Clean.xlsx
+probabilidades iniciales.ods
+legacy/

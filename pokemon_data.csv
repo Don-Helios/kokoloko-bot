@@ -8,6 +8,7 @@ Eternatus,300,N
 Geox,300,N
 Koraidon,300,N
 Kyogre,300,N
+Lunala,300,N
 Marshadow,300,N
 Mega Gengar,300,Y
 Mega Mewtwo Y,300,Y
@@ -23,6 +24,7 @@ Zacian,300,N
 Zacian-Crowned,300,N
 Zygarde-Complete,300,N
 Arceus-Dark,260,N
+Arceus-Electric,260,N
 Arceus-Ghost,260,N
 Arceus-Ice,260,N
 Arceus-Poison,260,N
@@ -37,7 +39,6 @@ Ho-Oh,260,N
 Kyurem-Black,260,N
 Kyurem-White,260,N
 Lugia,260,N
-Lunala,260,N
 Mega Mewtwo X,260,Y
 Mewtwo,260,N
 Necrozma-Dawn-Wings,260,N
@@ -49,7 +50,6 @@ Zamazenta,260,N
 Zekrom,260,N
 Arceus-Bug,240,N
 Arceus-Dragon,240,N
-Arceus-Electric,240,N
 Arceus-Fighting,240,N
 Arceus-Fire,240,N
 Arceus-Flying,240,N
@@ -123,6 +123,7 @@ Zeraora,200,N
 Zygarde-50%,200,N
 Aegislash,180,N
 Annihilape,180,N
+Basculegion Female,180,N
 Baxcalibur,180,N
 Blacephalon,180,N
 Celesteela,180,N
@@ -336,7 +337,6 @@ Alolan Muk,100,N
 Araquanid,100,N
 Arcanine,100,N
 Arctozolt,100,N
-Basculegion Female,200,N
 Basculegion Male,200,N
 Bewear,100,N
 Brambleghast,100,N
