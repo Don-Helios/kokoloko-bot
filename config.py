@@ -57,7 +57,7 @@ STAFF_ROLE_NAME = "NPO-Draft Staff"
 
 # --- EASTER EGGS ---
 # 0.032 = 3.2% Chance for Hariyama Fake Out to trigger on a pull of Tier 60 or less.
-FAKE_OUT_CHANCE = 0.32
+FAKE_OUT_CHANCE = 0.23
 
 # ==========================================
 # 🧵 THREAD & ANNOUNCEMENT SETTINGS
