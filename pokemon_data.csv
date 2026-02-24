@@ -29,6 +29,7 @@ Ho-Oh,260,N
 Kyurem-Black,260,N
 Kyurem-White,260,N
 Lugia,260,N
+Mega Magearna,260,Y
 Mega Mewtwo X,260,Y
 Mewtwo,260,N
 Necrozma-Dawn-Wings,260,N
@@ -561,6 +562,7 @@ Hitmonlee,60,N
 Hitmontop,60,N
 Honchkrow,60,N
 Houndoom,60,N
+Huntail,60,N
 Jynx,60,N
 Kabutops,60,N
 Kangaskhan,60,N
@@ -660,6 +662,7 @@ Chatot,40,N
 Chimecho,40,N
 Clefairy,40,N
 Combusken,40,N
+Corsola,40,N
 Crabominable,40,N
 Cramorant,40,N
 Crocalor,40,N
@@ -706,6 +709,7 @@ Hypno,40,N
 Illumise,40,N
 Jumpluff,40,N
 Kadabra,40,N
+Kecleon,40,N
 Kingler,40,N
 Klinklang,40,N
 Komala,40,N
@@ -794,12 +798,15 @@ Wynaut,40,N
 Alolan Graveler,20,N
 Alolan Vulpix,20,N
 Beedrill,20,N
+Bidoof,20,N
+Bronzor,20,N
 Carkol,20,N
 Castform,20,N
 Charjabug,20,N
 Cherrim,20,N
 Cosmoem,20,N
 Cosmog,20,N
+Cottonee,20,N
 Cutiefly,20,N
 Dedenne,20,N
 Delcatty,20,N
@@ -808,17 +815,20 @@ Dewpider,20,N
 Diglett,20,N
 Duosion,20,N
 Farfetch'd,20,N
+Feebas,20,N
 Fletchinder,20,N
 Graveler,20,N
 Hattrem,20,N
 Hippopotas,20,N
 Kricketune,20,N
+Lechonk,20,N
 Ledian,20,N
 Luvdisc,20,N
 Magikarp,20,N
 Magnemite,20,N
 Marill,20,N
 Metang,20,N
+Metapod,20,N
 Mightyena,20,N
 Minun,20,N
 Munchlax,20,N
@@ -828,10 +838,12 @@ Persian,20,N
 Plusle,20,N
 Porygon,20,N
 Quaxwell,20,N
+Seaking,20,N
 Shelgon,20,N
 Shelmet,20,N
 Sliggoo,20,N
 Sunflora,20,N
+Torontula,20,N
 Trapinch,20,N
 Unown,20,N
 Vulpix,20,N

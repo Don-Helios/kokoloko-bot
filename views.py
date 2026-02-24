@@ -34,7 +34,7 @@ def format_odds_grid(odds_data):
 def create_roll_embed(player, pick_num, expiry_time, odds_grid_str):
     """Standard pre-roll embed."""
     return discord.Embed(
-        title=f"🎲 Pick #{pick_num} • {player.display_name}",
+        title=f"🎲 Pokémon #{pick_num} • {player.display_name}",
         description=f"¡Toca el botón para girar!\n⏳ **Auto-roll** <t:{expiry_time}:R>\n\n**Probabilidades:**\n{odds_grid_str}",
         color=0x2ecc71
     )
@@ -46,11 +46,11 @@ def create_fake_embed(player, name, tier):
     Uses Gold Color (0xFFD700) to mimic a high-value/Critical hit.
     """
     embed = discord.Embed(
-        title=f"✨ CRITICAL HIT! • {player.display_name}",
-        description=f"You pulled the legendary:\n# **{name}**\n**(Tier {tier})**",
+        title=f"✨ ¡GOLPE CRÍTICO! • {player.display_name}",
+        description=f"Has sacado el tazo dorado✨:\n# **{name}**\n**(Tier {tier})**",
         color=0xFFD700
     )
-    embed.set_footer(text="Wait... something feels off...")
+   # embed.set_footer(text="Espera... algo raro se aproxima...")
     return embed
 
 
@@ -59,7 +59,7 @@ def create_summary_embed(draft_state):
     Generates a Paginated Summary (List of Embeds) to avoid Discord char limits.
     """
     if not draft_state["rosters"]:
-        return [discord.Embed(title="📊 No Data", description="Draft hasn't started.")]
+        return [discord.Embed(title="📊 Sin información", description="El Draft no ha iniciado.")]
     embeds = []
     unique_players = []
     seen = set()
@@ -73,15 +73,15 @@ def create_summary_embed(draft_state):
         chunk = unique_players[i:i + CHUNK_SIZE]
         page_num = (i // CHUNK_SIZE) + 1
         total_pages = (len(unique_players) + CHUNK_SIZE - 1) // CHUNK_SIZE
-        embed = discord.Embed(title=f"📊 Draft Summary (Page {page_num}/{total_pages})", color=0x3498db)
+        embed = discord.Embed(title=f"📊 Resumen del Draft (Página {page_num}/{total_pages})", color=0x3498db)
         for player in chunk:
             roster = draft_state["rosters"].get(player.id, [])
             points_spent = draft_state["points"].get(player.id, 0)
             points_left = config.MAX_POINTS - points_spent
             rerolls_left = config.MAX_REROLLS - draft_state["rerolls"].get(player.id, 0)
 
-            p_list = "\n".join([f"• **{p['name']}** ({p['tier']})" for p in roster]) if roster else "*(No picks yet)*"
-            val = f"{p_list}\n-------------------\n💰 **Pts:** {points_spent} (Left: {points_left})\n🎲 **Rerolls:** {rerolls_left}"
+            p_list = "\n".join([f"• **{p['name']}** ({p['tier']})" for p in roster]) if roster else "*(No tiene Pokémon aún)*"
+            val = f"{p_list}\n-------------------\n💰 **Pts:** {points_spent} (Restantes: {points_left})\n🎲 **Reintentos:** {rerolls_left}"
             if len(val) > 1020: val = val[:1015] + "..."
             embed.add_field(name=f"👤 {player.display_name}", value=val, inline=True)
         embeds.append(embed)
@@ -99,22 +99,22 @@ class DummyCheckView(discord.ui.View):
 
     async def check_staff(self, interaction):
         if not discord.utils.get(interaction.user.roles, name=config.STAFF_ROLE_NAME):
-            await interaction.response.send_message("🚫 Staff only.", ephemeral=True)
+            await interaction.response.send_message("🚫 Solo para Draft Staff.", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Yes, add Dummies", style=discord.ButtonStyle.success, emoji="🤖")
+    @discord.ui.button(label="Si, agregar dummies", style=discord.ButtonStyle.success, emoji="🤖")
     async def confirm(self, interaction, button):
         if not await self.check_staff(interaction): return
         self.value = True
-        await interaction.response.edit_message(content="✅ **Dummies Enabled**", view=None, embed=None)
+        await interaction.response.edit_message(content="✅ **Dummies Habilitados**", view=None, embed=None)
         self.stop()
 
-    @discord.ui.button(label="No, Real Players Only", style=discord.ButtonStyle.secondary, emoji="👤")
+    @discord.ui.button(label="No, solo personas", style=discord.ButtonStyle.secondary, emoji="👤")
     async def cancel(self, interaction, button):
         if not await self.check_staff(interaction): return
         self.value = False
-        await interaction.response.edit_message(content="❌ **Dummies Disabled**", view=None, embed=None)
+        await interaction.response.edit_message(content="❌ **Dummies Deshabilitados**", view=None, embed=None)
         self.stop()
 
 
@@ -129,25 +129,25 @@ class ModeSelectionView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Interactive", style=discord.ButtonStyle.primary, emoji="🔴")
+    @discord.ui.button(label="Interactivo", style=discord.ButtonStyle.primary, emoji="🔴")
     async def mode_interactive(self, interaction, button):
         if not await self.check_staff(interaction): return
         self.value = 0
-        await interaction.response.edit_message(content="✅ **Interactive**", view=None, embed=None)
+        await interaction.response.edit_message(content="✅ **Interactivo**", view=None, embed=None)
         self.stop()
 
-    @discord.ui.button(label="Auto Public", style=discord.ButtonStyle.success, emoji="🟢")
+    @discord.ui.button(label="Auto Aceptar", style=discord.ButtonStyle.success, emoji="🟢")
     async def mode_public(self, interaction, button):
         if not await self.check_staff(interaction): return
         self.value = 1
-        await interaction.response.edit_message(content="✅ **Auto Public**", view=None, embed=None)
+        await interaction.response.edit_message(content="✅ **Auto Aceptar**", view=None, embed=None)
         self.stop()
 
-    @discord.ui.button(label="Auto Silent", style=discord.ButtonStyle.secondary, emoji="🤫")
+    @discord.ui.button(label="Simulación rápida", style=discord.ButtonStyle.secondary, emoji="🤫")
     async def mode_silent(self, interaction, button):
         if not await self.check_staff(interaction): return
         self.value = 2
-        await interaction.response.edit_message(content="✅ **Auto Silent**", view=None, embed=None)
+        await interaction.response.edit_message(content="✅ **Simulación rápida**", view=None, embed=None)
         self.stop()
 
 
@@ -161,11 +161,11 @@ class RollView(discord.ui.View):
         for child in self.children: child.disabled = True
         await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="🎲 ROLL DICE", style=discord.ButtonStyle.primary, emoji="🎲")
+    @discord.ui.button(label="🎲 TIRAR DADO", style=discord.ButtonStyle.primary, emoji="🎲")
     async def roll_button(self, interaction, button):
         if interaction.user.id != self.coach.id and not discord.utils.get(interaction.user.roles,
                                                                           name=config.STAFF_ROLE_NAME):
-            return await interaction.response.send_message("🚫 Not your turn.", ephemeral=True)
+            return await interaction.response.send_message("🚫 No es tu turno.", ephemeral=True)
         self.clicked = True
         await self.disable_all(interaction)
         self.stop()
@@ -189,7 +189,7 @@ class DraftView(discord.ui.View):
         for child in self.children: child.disabled = True
         await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label="✅ Keep", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="✅ Aceptar", style=discord.ButtonStyle.success)
     async def keep(self, interaction, button):
         if not await self.check_permissions(interaction): return
         self.value = "KEEP"
@@ -197,7 +197,7 @@ class DraftView(discord.ui.View):
         await self.disable_all(interaction)
         self.stop()
 
-    @discord.ui.button(label="🎲 Re-Roll", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="🎲 Reintentar", style=discord.ButtonStyle.danger)
     async def reroll(self, interaction, button):
         if not await self.check_permissions(interaction): return
         self.value = "REROLL"

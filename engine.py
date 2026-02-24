@@ -43,6 +43,17 @@ async def next_turn(channel, bot_instance, retries=3):
             mode = state.get("auto_mode", 0)
             if mode != 2:
                 await channel.send(f"🔁 **End of Round!** Snake order for Round {state['round']}...")
+
+                # ==========================================
+                # AUTO-SUMMARY LOGIC
+                # ==========================================
+                # Displays the summary exactly at the beginning of Round 3 and beyond
+                if state["round"] > 2:
+                    logger.info(f"Displaying auto-summary for start of Round {state['round']}")
+                    for embed in views.create_summary_embed(state):
+                        await channel.send(embed=embed)
+                # ==========================================
+
                 logger.info(f"--- STARTING ROUND {state['round']} ---")
                 await asyncio.sleep(1)
             else:
@@ -66,6 +77,58 @@ async def next_turn(channel, bot_instance, retries=3):
         mode = state.get("auto_mode", 0)
 
         logger.info(f"[Turn Start] Round {state['round']}, Pick #{pick_num} for {player.display_name}")
+
+        # =========================================
+        # 🔔 UPCOMING TURN NOTIFICATION (DM)
+        # =========================================
+        # Simulate exactly 3 turns into the future to DM the upcoming player.
+        # Only do this in Interactive mode, otherwise it will spam everyone instantly.
+        if mode == 0:
+            target_round = state["round"]
+            temp_idx = state["current_index"]
+            is_reversed_sim = False
+
+            upcoming_players = []
+
+            # Walk forward 3 steps to build a list of the next 3 players
+            for _ in range(3):
+                temp_idx += 1
+                if temp_idx >= len(state["order"]):
+                    target_round += 1
+                    temp_idx = 0
+                    is_reversed_sim = not is_reversed_sim  # The order flips every new round!
+
+                if target_round <= config.TOTAL_POKEMON:
+                    if is_reversed_sim:
+                        # If we spilled into a reversed round, we read the array backwards
+                        sim_player = state["order"][::-1][temp_idx]
+                    else:
+                        sim_player = state["order"][temp_idx]
+                    upcoming_players.append(sim_player)
+
+            if len(upcoming_players) == 3:
+                target_player = upcoming_players[-1]  # The person exactly 3 turns away
+
+                # OVERLAP CHECK: Snake drafts cause back-to-back turns.
+                # If the target is currently picking, or up in 1 or 2 turns, do NOT spam them again.
+                if target_player != player and target_player not in upcoming_players[:-1]:
+                    # Ensure it's a real user (DummyPlayer has no 'send' method)
+                    if hasattr(target_player, "send"):
+                        try:
+                            dm_embed = discord.Embed(
+                                title="🔔 Kokoloko Draft Alert",
+                                description=(
+                                    f"Get ready, **{target_player.display_name}**! You are up in exactly **3 turns**.\n\n"
+                                    f"👉 **[Click here to go to the draft thread]({channel.jump_url})**"
+                                ),
+                                color=0x3498db
+                            )
+                            await target_player.send(embed=dm_embed)
+                            logger.info(f"Sent 3-turn warning DM to {target_player.display_name}")
+                        except discord.Forbidden:
+                            logger.warning(f"Could not send DM to {target_player.display_name} (DMs disabled).")
+                        except Exception as e:
+                            logger.error(f"Failed to send DM to {target_player.display_name}: {e}")
 
         # =========================================
         # PATH A: SILENT AUTO (Mode 2)
@@ -157,6 +220,41 @@ async def next_turn(channel, bot_instance, retries=3):
 
                 logger.info(f"RNG generated: {name} (T{tier}) for {player.display_name}")
 
+                # ==========================================
+                # ✨ FAKE OUT EASTER EGG (NEW LOGIC)
+                # ==========================================
+                # Trigger: Rolled a <= 60 tier AND hit the 3.2% chance (Irrespective of turn number)
+                if tier <= 60 and random.random() < config.FAKE_OUT_CHANCE:
+                    fake_name, fake_tier = logic.get_fake_candidate(player.id, pick_num, current_is_reroll)
+
+                    if fake_name:
+                        logger.info(
+                            f"✨ Easter Egg Triggered: Faking {player.display_name} with {fake_name} (T{fake_tier}) instead of actual {name} (T{tier})")
+
+                        # 1. Reveal Fake Embed (Golden/Shiny)
+                        fake_embed = views.create_fake_embed(player, fake_name, fake_tier)
+                        fake_msg = await channel.send(f"{player.mention}", embed=fake_embed)
+
+                        # Wait exactly 7 seconds with the golden message
+                        await asyncio.sleep(7)
+
+                        # 2. Hide the fake pull in a spoiler and add the suspense message.
+                        # Discord cannot spoiler an embed directly after sending, so we convert it to spoilered text.
+                        spoilered_text = f"||✨ CRITICAL HIT! You pulled the legendary: **{fake_name}** (Tier {fake_tier})||\n\n*...Wait... something feels off...*"
+                        await fake_msg.edit(content=spoilered_text, embed=None)
+
+                        # Wait exactly 3 seconds for the panic to set in
+                        await asyncio.sleep(3)
+
+                        # 3. Hariyama Message Drop as a new message to continue the flow
+                        await channel.send("✋ **Hariyama used Fake Out!**")
+                        await asyncio.sleep(2)
+
+                        # 4. Transition to actual pull
+                        await channel.send(f"😅 Just kidding {player.mention}, your **actual** pull is...")
+                        await asyncio.sleep(1)
+                # ==========================================
+
                 # Forced accept if out of rerolls mid-loop
                 if curr_left <= 0 and current_is_reroll:
                     state["rosters"][player.id].append({'name': name, 'tier': tier})
@@ -168,7 +266,7 @@ async def next_turn(channel, bot_instance, retries=3):
                     logger.info(f"Forced accept for {player.display_name} (0 rerolls left).")
                     break
 
-                # Show Result
+                # Show Result (This is now the REAL pull, which appears immediately if no fake-out happened)
                 expiry_dec = int(time.time()) + config.DECISION_TIMEOUT
                 embed = discord.Embed(
                     title=f"Pick #{pick_num} • {player.display_name}",
@@ -194,26 +292,6 @@ async def next_turn(channel, bot_instance, retries=3):
                     await channel.send(f"🔄 **{clicker}** re-rolled! ({new_left} left).")
                     state["burned"].append(name)
                     current_is_reroll = True
-
-                    # --- FAKE OUT EASTER EGG ---
-                    # Trigger: "2 picks left" -> Penultimate Pick (9 of 10)
-                    is_penultimate = (pick_num == config.TOTAL_POKEMON - 1)
-
-                    if is_penultimate and random.random() < config.FAKE_OUT_CHANCE:
-                        fake_name, fake_tier = logic.get_fake_candidate(player.id)
-                        if fake_name:
-                            logger.info(f"✨ Easter Egg Triggered: Faking {player.display_name} with {fake_name}")
-                            # 1. Reveal Fake
-                            fake_msg = await channel.send(embed=views.create_fake_embed(player, fake_name, fake_tier))
-                            await asyncio.sleep(5)
-
-                            # 2. Hariyama Message
-                            await fake_msg.edit(
-                                content="✋ **Hariyama used Fake Out!** You don't have enough points for that!",
-                                embed=None)
-                            await asyncio.sleep(2)
-                            await channel.send(f"😅 Just kidding {player.mention}, your **actual** pull always was...")
-                            await asyncio.sleep(1)
 
                     continue  # Loop back to roll again
 

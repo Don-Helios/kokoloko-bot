@@ -10,16 +10,28 @@ import sys
 # ==========================================
 # 📝 MASTER LOGGING SETUP
 # ==========================================
-# This initializes the logging for the entire bot
-logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
-    format='%(asctime)s | %(levelname)-7s | %(name)-8s | %(message)s',
-    handlers=[
-        logging.FileHandler(config.LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler(sys.stdout) # Also prints to your terminal
-    ]
-)
+# Create a standard format for the logs
+formatter = logging.Formatter('%(asctime)s | %(levelname)-7s | %(name)-8s | %(message)s')
+
+# 1. File Handler: Captures EVERYTHING (DEBUG and above) for deep tracing
+file_handler = logging.FileHandler(config.LOG_FILE, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+# 2. Console Handler: Captures ONLY INFO and above to keep terminal clean
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+
+# Attach both handlers to the root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)  # Root must be DEBUG to allow the file handler to catch it
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
+# Specific logger for this file
 logger = logging.getLogger("kokoloko")
+
 
 # ==========================================
 # TEST DUMMIES
@@ -51,6 +63,10 @@ async def on_ready():
 @bot.command()
 async def toggle_auto(ctx):
     """Command to cycle draft modes."""
+    # Enforce Thread Usage
+    if not isinstance(ctx.channel, discord.Thread) or ctx.channel.name != config.THREAD_NAME:
+        return await ctx.send(f"🚫 Please use this command inside the `{config.THREAD_NAME}` thread.", delete_after=10)
+
     if not discord.utils.get(ctx.author.roles, name=config.STAFF_ROLE_NAME):
         logger.warning(f"Unauthorized toggle_auto attempt by {ctx.author}")
         return await ctx.send("🚫 Staff only.")
@@ -67,6 +83,10 @@ async def toggle_auto(ctx):
 @bot.command()
 async def summary(ctx):
     """Command to show current draft state."""
+    # Enforce Thread Usage
+    if not isinstance(ctx.channel, discord.Thread) or ctx.channel.name != config.THREAD_NAME:
+        return await ctx.send(f"🚫 Please use this command inside the `{config.THREAD_NAME}` thread.", delete_after=10)
+
     logger.info(f"Summary requested by {ctx.author}")
     for embed in views.create_summary_embed(logic.draft_state):
         await ctx.send(embed=embed)
@@ -75,13 +95,23 @@ async def summary(ctx):
 @bot.command()
 async def start_draft(ctx, *members: discord.Member):
     """Main startup command."""
+    # =========================================
+    # 0. THREAD ENFORCEMENT
+    # =========================================
+    if not isinstance(ctx.channel, discord.Thread) or ctx.channel.name != config.THREAD_NAME:
+        logger.warning(f"Start attempt outside thread. Channel: {ctx.channel.name}")
+        return await ctx.send(f"🚫 Please start the draft from inside the `{config.THREAD_NAME}` thread.",
+                              delete_after=10)
+
     logger.info(f"Draft initiation started by {ctx.author}")
     real = list(members)
     final = []
 
+    # =========================================
     # 1. Check for Dummies
+    # =========================================
     if TEST_DUMMIES:
-        e = discord.Embed(title="🤖 Setup", description=f"Include {len(TEST_DUMMIES)} dummies?", color=0x34495e)
+        e = discord.Embed(title="🤖 Configuración", description=f"Incluir los {len(TEST_DUMMIES)} dummies?", color=0x34495e)
         v = views.DummyCheckView()
         m = await ctx.send(embed=e, view=v)
         await v.wait()
@@ -96,7 +126,9 @@ async def start_draft(ctx, *members: discord.Member):
         logger.warning("Draft failed to start: No players provided.")
         return await ctx.send("❌ No players!")
 
+    # =========================================
     # 2. Select Mode
+    # =========================================
     e = discord.Embed(title="🔧 Setup", description="Select Mode:", color=0x9b59b6)
     v = views.ModeSelectionView()
     m = await ctx.send(embed=e, view=v)
@@ -105,17 +137,39 @@ async def start_draft(ctx, *members: discord.Member):
         logger.info("Draft setup cancelled (Timeout on Mode select).")
         return await m.edit(content="❌ Timeout", embed=None, view=None)
 
+    # =========================================
     # 3. Initialize
+    # =========================================
     logic.initialize_draft(final)
     logic.draft_state["auto_mode"] = v.value
     logger.info(f"Draft initialized successfully. Mode: {v.value}, Players: {len(final)}")
 
+    # =========================================
+    # 4. Parent Channel Announcement
+    # =========================================
     if v.value != 2:
+        # Find the Draft role to ping
+        role_to_ping = discord.utils.get(ctx.guild.roles, name=config.PING_ROLE_NAME)
+        ping_text = role_to_ping.mention if role_to_ping else f"@{config.PING_ROLE_NAME}"
+
+        announcement_msg = f"📢 A Kokoloko Draft is starting! Come over to the {ctx.channel.mention} thread to check it out {ping_text}"
+
+        try:
+            # Send the message to the parent channel (e.g. #drafts)
+            await ctx.channel.parent.send(announcement_msg)
+            logger.info(f"Announcement sent to parent channel: {ctx.channel.parent.name}")
+        except discord.Forbidden:
+            logger.error("Failed to announce: Bot lacks 'Send Messages' permission in the parent channel.")
+        except Exception as e:
+            logger.error(f"Failed to send announcement: {e}")
+
+        # Send regular startup message in the thread
         names = ", ".join([p.display_name for p in final])
         await ctx.send(f"🏆 **Draft Started!**\nOrder: {names}")
     else:
         logger.info("🏆 [SILENT] Started")
 
+    # Hand off to engine. (ctx.channel is the thread, so engine stays in the thread)
     await engine.next_turn(ctx.channel, bot)
 
 

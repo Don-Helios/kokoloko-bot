@@ -46,9 +46,9 @@ TIER_PROBS = {
     120: 15.00,  # 15.00%
     100: 12.25,  # 12.25%
     80:  10.00,  # 10.00%
-    60:  7.00,   # 7.00%
+    60:  7.50,   # 7.50%
     40:  3.00,   # 3.00%
-    20:  2.00    # 2.00%
+    20:  1.50    # 1.50%
 }
 
 # --- PERMISSIONS ---
@@ -56,11 +56,20 @@ TIER_PROBS = {
 STAFF_ROLE_NAME = "NPO-Draft Staff"
 
 # --- EASTER EGGS ---
-# 0.32 = 32% Chance for Hariyama Fake Out to trigger on the penultimate pick.
+# 0.032 = 3.2% Chance for Hariyama Fake Out to trigger on a pull of Tier 60 or less.
 FAKE_OUT_CHANCE = 0.32
 
 # ==========================================
-# 📝 LOGGING SETTINGS (NEW)
+# 🧵 THREAD & ANNOUNCEMENT SETTINGS
 # ==========================================
-LOG_FILE = 'kokoloko.log'  # The file where logs will be saved
-LOG_LEVEL = 'INFO'         # 'DEBUG' (very detailed), 'INFO' (normal), 'ERROR' (only crashes)
+# The exact name of the thread where the bot is allowed to operate.
+THREAD_NAME = "kokoloko-draft"
+# The exact name of the role to ping when a draft starts.
+PING_ROLE_NAME = "Daft"
+
+# ==========================================
+# 📝 LOGGING SETTINGS
+# ==========================================
+# The file where detailed background DEBUG logs will be saved.
+# The terminal will only show INFO and above to stay clean.
+LOG_FILE = 'kokoloko.log'
