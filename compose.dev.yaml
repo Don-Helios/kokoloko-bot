@@ -1,0 +1,12 @@
+name: discord-bot-dev
+services:
+  python-dev:
+    build: .
+    container_name: python_bot_dev
+    restart: "no"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    # OVERRIDE: This ignores the Python execution and keeps the container idle
+    command: ["sleep", "infinity"]

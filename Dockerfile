@@ -18,5 +18,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 #Copy the remaining project files
 COPY . .
 
-#Defaul commnand to execute the bot
-CMD ["bash"]
+# Default command to execute the bot
+CMD ["python", "kokoloko.py"]
