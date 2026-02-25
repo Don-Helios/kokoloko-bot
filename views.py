@@ -23,6 +23,11 @@ MSG = {
     "setup_mode_desc": "Selecciona el modo:",
     "announce_parent": "📢 ¡El Kokoloko Draft acaba de iniciar! Entra en el hilo {thread_mention} para ver la selección {ping_text}",
     "draft_started": "🏆 **¡Draft iniciado!**\nOrden: {names}",
+    "err_draft_active": "🚫 ¡Ya hay un draft en curso! Usa `!cancel_draft` para detenerlo primero.",
+    "draft_cancelled": "🛑 **El draft ha sido cancelado forzosamente por un administrador.**",
+    "err_no_active_draft": "⚠️ No hay ningún draft activo en este momento.",
+    "err_draft_role": "🚫 Solo los miembros con el rol 'Draft' pueden usar este comando.",
+
 
     # --- Engine.py (Game Flow & Turns) ---
     "draft_complete": "🏁 **¡Draft Finalizado!**",
@@ -30,15 +35,18 @@ MSG = {
     "err_critical_pool": "⚠️ **ERROR:** No hay Pokémon válidos.",
     "roll_timeout": "⏰ **Tiempo agotado** - Lanzamiento automático...",
     "rolling": "**Rolling...** 🎰\n\n**Probabilidades:**\n{odds}",
-    "fakeout_spoiler": "||✨ ¡Golpe crítico! Has sacado el tazo dorado✨: **{name}** (Tier {tier})||\n\n*...Espera... algo se aproxima...*",
-    "fakeout_hariyama": "✋ **Delibird usó Sorpresa!**",
-    "fakeout_reveal": "😅 {mention}, tu **verdadero Pokémon** ES...",
+    "fakeout_spoiler": "||✨ ¡Golpe crítico! Has sacado el tazo dorado✨: **{name}** (Tier {tier})||\n\n*...Espera...* **algo se aproxima...**",
+    "fakeout_delibird": "✋ **¡Delibird usó Sorpresa!**",
+    "fakeout_reveal": " 🤡 {mention}, tu **verdadero Pokémon es** ...",
     "action_reroll": "🔄 **{clicker}** utilizó un reintento! (le quedan {left}).",
     "action_keep": "✅ **{clicker}** aceptó **{name}**.",
     "action_timeout": "⏰ Tiempo agotado: se aceptó automáticamente **{name}**.",
     "err_api_fatal": "🚨 **FATAL:** Discord API is continuously rejecting our connection. The draft has paused.",
-    "err_bot_crash": "🚨 A bot error occurred. The draft loop has paused. Check `kokoloko.log` for details."
+    "err_bot_crash": "🚨 A bot error occurred. The draft loop has paused. Check `kokoloko.log` for details.",
+    "dm_out_of_rerolls": "🔔 **Aviso:** ¡Te has quedado sin reintentos! \nA partir de ahora tus Pokémon serán aceptados automáticamente y ya no recibirás recordatorios de turno."
+
 }
+
 
 # ==========================================
 # 🎨 FORMATTERS & UTILS
@@ -76,17 +84,22 @@ def create_roll_embed(player, pick_num, expiry_time, odds_grid_str):
         color=0x2ecc71
     )
 
-def create_fake_embed(player, name, tier):
+
+def create_fake_embed(player, name, tier, sprite_url):
     """
     The 'Fake Out' Easter Egg Embed.
     Uses Gold Color (0xFFD700) to mimic a high-value/Critical hit.
+    Image is set as a large banner via set_image() to maximize dramatic effect.
     """
     embed = discord.Embed(
         title=f"✨ ¡GOLPE CRÍTICO! • {player.display_name}",
         description=f"has sacado el tazo dorado✨:\n# **{name}**\n**(Tier {tier})**",
         color=0xFFD700
     )
+    if sprite_url and sprite_url.startswith("http"):
+        embed.set_image(url=sprite_url)
     return embed
+
 
 def create_dm_embed(player, jump_url):
     """Embed sent via DM to ping players 3 turns in advance."""
@@ -99,15 +112,20 @@ def create_dm_embed(player, jump_url):
         color=0x3498db
     )
 
-def create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left):
+
+def create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left, sprite_url):
     """Embed shown when a Pokémon is auto-accepted (Mode 1 or 0 rerolls)."""
     ft_text = "⚡ Aceptación automática" if mode == 1 else "🔒 Ya no te quedan reintentos"
     embed = discord.Embed(title=f"Pokémon #{pick_num} • {player.display_name}", color=0x95a5a6)
     embed.add_field(name="Aceptado Automáticamente", value=f"**{name}** (Tier {tier})")
     embed.set_footer(text=f"{ft_text} | Puntos: {pts_left} pts restantes")
+
+    if sprite_url and sprite_url.startswith("http"):
+        embed.set_thumbnail(url=sprite_url)
     return embed
 
-def create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, round_num, expiry_dec):
+
+def create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, round_num, expiry_dec, sprite_url):
     """Embed shown showing the rolled Pokémon, asking Keep/Reroll."""
     embed = discord.Embed(
         title=f"Pokémon #{pick_num} • {player.display_name}",
@@ -118,7 +136,11 @@ def create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, rou
     embed.add_field(name="Tier", value=f"{tier}", inline=True)
     embed.add_field(name="Puntos", value=f"{pts_left} pts restantes", inline=False)
     embed.set_footer(text=f"Reintentos restantes: {curr_left}/{config.MAX_REROLLS}")
+
+    if sprite_url and sprite_url.startswith("http"):
+        embed.set_thumbnail(url=sprite_url)
     return embed
+
 
 def create_summary_embed(draft_state):
     """
@@ -210,7 +232,7 @@ class ModeSelectionView(discord.ui.View):
         if not await self.check_staff(interaction): return
         self.value = 1
         logger.debug(f"{interaction.user} selected Auto Public Mode.")
-        await interaction.response.edit_message(content="✅ **Auto aceptar*", view=None, embed=None)
+        await interaction.response.edit_message(content="✅ **Auto aceptar**", view=None, embed=None)
         self.stop()
 
     @discord.ui.button(label="Simulación rápida", style=discord.ButtonStyle.secondary, emoji="🤫")

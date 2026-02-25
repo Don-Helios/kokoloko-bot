@@ -66,7 +66,9 @@ async def toggle_auto(ctx):
         return await ctx.send(views.MSG["err_staff"])
 
     current = logic.draft_state.get("auto_mode", 0)
-    new_mode = (current + 1) % 3
+
+    # Toggle strictly between 0 (Interactive) and 1 (Auto Public)
+    new_mode = 1 if current == 0 else 0
     logic.draft_state["auto_mode"] = new_mode
 
     logger.info(f"Mode switched by {ctx.author} to {views.MSG['mode_names'][new_mode]}")
@@ -79,9 +81,36 @@ async def summary(ctx):
     if not isinstance(ctx.channel, discord.Thread) or ctx.channel.name != config.THREAD_NAME:
         return await ctx.send(views.MSG["err_thread"].format(thread=config.THREAD_NAME), delete_after=10)
 
+    # 🔒 RESTRICTED TO "Draft" ROLE
+    if not discord.utils.get(ctx.author.roles, name="Draft"):
+        logger.warning(f"Unauthorized summary attempt by {ctx.author}")
+        return await ctx.send(views.MSG.get("err_draft_role", "🚫 No tienes permiso."))
+
     logger.info(f"Summary requested by {ctx.author}")
     for embed in views.create_summary_embed(logic.draft_state):
         await ctx.send(embed=embed)
+
+
+@bot.command()
+async def cancel_draft(ctx):
+    """Forcefully stops an active draft loop."""
+    if not isinstance(ctx.channel, discord.Thread) or ctx.channel.name != config.THREAD_NAME:
+        return await ctx.send(views.MSG["err_thread"].format(thread=config.THREAD_NAME), delete_after=10)
+
+    if not discord.utils.get(ctx.author.roles, name=config.STAFF_ROLE_NAME):
+        logger.warning(f"Unauthorized cancel_draft attempt by {ctx.author}")
+        return await ctx.send(views.MSG["err_staff"])
+
+    if not logic.draft_state.get("active", False):
+        return await ctx.send(views.MSG.get("err_no_active_draft", "⚠️ No active draft."))
+
+    # Kill the loop by setting the counters past the finish line and disabling the active flag
+    logic.draft_state["active"] = False
+    logic.draft_state["current_index"] = 9999
+    logic.draft_state["round"] = 9999
+
+    logger.critical(f"🛑 DRAFT FORCEFULLY CANCELLED BY {ctx.author}")
+    await ctx.send(views.MSG.get("draft_cancelled", "🛑 Draft Cancelled."))
 
 
 @bot.command()
@@ -90,6 +119,15 @@ async def start_draft(ctx, *members: discord.Member):
     if not isinstance(ctx.channel, discord.Thread) or ctx.channel.name != config.THREAD_NAME:
         logger.warning(f"Start attempt outside thread. Channel: {ctx.channel.name}")
         return await ctx.send(views.MSG["err_thread"].format(thread=config.THREAD_NAME), delete_after=10)
+
+    if not discord.utils.get(ctx.author.roles, name=config.STAFF_ROLE_NAME):
+        logger.warning(f"Unauthorized start_draft attempt by {ctx.author}")
+        return await ctx.send(views.MSG["err_staff"])
+
+    # 🛑 PREVENT DOUBLE DRAFTS 🛑
+    if logic.draft_state.get("active", False):
+        logger.warning(f"Blocked start_draft attempt by {ctx.author}: Draft already running.")
+        return await ctx.send(views.MSG.get("err_draft_active", "🚫 Draft already in progress."))
 
     logger.info(f"Draft initiation started by {ctx.author}")
     real = list(members)

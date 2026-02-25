@@ -11,9 +11,17 @@ logger = logging.getLogger("engine")
 
 
 async def next_turn(channel, bot_instance, retries=3):
+    """
+    The Main Game Loop.
+    Handles Round progression, Player Turns, and Mode Switching.
+    Added a retry parameter to gracefully handle Discord API drops.
+    """
     try:
         state = logic.draft_state
 
+        # =========================================
+        # 1. ROUND MANAGEMENT
+        # =========================================
         if state["current_index"] >= len(state["order"]):
             if state["round"] >= config.TOTAL_POKEMON:
                 if state["active"]:
@@ -33,6 +41,7 @@ async def next_turn(channel, bot_instance, retries=3):
             if mode != 2:
                 await channel.send(views.MSG["end_of_round"].format(round_num=state['round']))
 
+                # Displays the summary exactly at the beginning of Round 3 and beyond
                 if state["round"] > 2:
                     logger.info(f"Displaying auto-summary for start of Round {state['round']}")
                     for embed in views.create_summary_embed(state):
@@ -59,12 +68,16 @@ async def next_turn(channel, bot_instance, retries=3):
 
         logger.info(f"[Turn Start] Round {state['round']}, Pick #{pick_num} for {player.display_name}")
 
+        # =========================================
+        # 🔔 UPCOMING TURN NOTIFICATION (DM)
+        # =========================================
         if mode == 0:
             target_round = state["round"]
             temp_idx = state["current_index"]
             is_reversed_sim = False
             upcoming_players = []
 
+            # Walk forward 3 steps to build a list of the next 3 players
             for _ in range(3):
                 temp_idx += 1
                 if temp_idx >= len(state["order"]):
@@ -81,7 +94,13 @@ async def next_turn(channel, bot_instance, retries=3):
 
             if len(upcoming_players) == 3:
                 target_player = upcoming_players[-1]
-                if target_player != player and target_player not in upcoming_players[:-1]:
+
+                # Verify if the target actually has rerolls left to justify pinging them
+                target_rerolls = state["rerolls"].get(target_player.id, 0)
+                target_has_rerolls = (config.MAX_REROLLS - target_rerolls) > 0
+
+                # OVERLAP CHECK & REROLL CHECK
+                if target_player != player and target_player not in upcoming_players[:-1] and target_has_rerolls:
                     if hasattr(target_player, "send"):
                         try:
                             dm_embed = views.create_dm_embed(target_player, channel.jump_url)
@@ -92,11 +111,15 @@ async def next_turn(channel, bot_instance, retries=3):
                         except Exception as e:
                             logger.error(f"Failed to send DM to {target_player.display_name}: {e}")
 
+        # =========================================
+        # PATH A: SILENT AUTO (Mode 2)
+        # =========================================
         if mode == 2:
             valid_tiers = logic.get_valid_tiers(player.id, pick_num, is_reroll=False)
-            name, tier = logic.roll_pokemon(valid_tiers, player.id, pick_num, is_reroll=False)
+            name, tier, sprite_url = logic.roll_pokemon(valid_tiers, player.id, pick_num, is_reroll=False)
+
             if name:
-                state["rosters"][player.id].append({'name': name, 'tier': tier})
+                state["rosters"][player.id].append({'name': name, 'tier': tier, 'sprite': sprite_url})
                 state["points"][player.id] += tier
                 print(f"[R{state['round']}] P#{pick_num} {player.display_name}: {name}")
                 pts_left = config.MAX_POINTS - state["points"][player.id]
@@ -111,24 +134,30 @@ async def next_turn(channel, bot_instance, retries=3):
             await next_turn(channel, bot_instance)
             return
 
+        # =========================================
+        # PATH B: PUBLIC AUTO (Mode 1)
+        # =========================================
         if mode == 1 or not can_reroll:
             valid_tiers = logic.get_valid_tiers(player.id, pick_num, is_reroll=False)
-            name, tier = logic.roll_pokemon(valid_tiers, player.id, pick_num, is_reroll=False)
+            name, tier, sprite_url = logic.roll_pokemon(valid_tiers, player.id, pick_num, is_reroll=False)
 
             if not name:
                 logger.error(f"Critical Auto-Mode Error: No valid candidates for {player.display_name}")
                 await channel.send(views.MSG["err_critical_pool"])
             else:
-                state["rosters"][player.id].append({'name': name, 'tier': tier})
+                state["rosters"][player.id].append({'name': name, 'tier': tier, 'sprite': sprite_url})
                 state["points"][player.id] += tier
                 pts_left = config.MAX_POINTS - state["points"][player.id]
 
-                embed = views.create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left)
+                embed = views.create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left, sprite_url)
                 await channel.send(f"{player.mention}", embed=embed)
 
                 logger.info(f"[Auto-Mode] Assigned {name} (T{tier}) to {player.display_name}")
                 if mode == 1: await asyncio.sleep(0.5)
 
+        # =========================================
+        # PATH C: INTERACTIVE (Mode 0)
+        # =========================================
         else:
             expiry_roll = int(time.time()) + config.ROLL_TIMEOUT
             odds = logic.calculate_tier_percentages(player.id, pick_num, is_reroll=False)
@@ -158,7 +187,7 @@ async def next_turn(channel, bot_instance, retries=3):
                 pts_left = config.MAX_POINTS - state["points"].get(player.id, 0)
 
                 v_tiers = logic.get_valid_tiers(player.id, pick_num, is_reroll=current_is_reroll)
-                name, tier = logic.roll_pokemon(v_tiers, player.id, pick_num, is_reroll=current_is_reroll)
+                name, tier, sprite_url = logic.roll_pokemon(v_tiers, player.id, pick_num, is_reroll=current_is_reroll)
 
                 if not name:
                     logger.error(f"Decision Phase Error: Pool Empty for {player.display_name}")
@@ -167,14 +196,16 @@ async def next_turn(channel, bot_instance, retries=3):
 
                 logger.info(f"RNG generated: {name} (T{tier}) for {player.display_name}")
 
+                # ✨ FAKE OUT EASTER EGG (NEW LOGIC)
                 if tier <= 60 and random.random() < config.FAKE_OUT_CHANCE:
-                    fake_name, fake_tier = logic.get_fake_candidate(player.id, pick_num, current_is_reroll)
+                    fake_name, fake_tier, fake_sprite_url = logic.get_fake_candidate(player.id, pick_num,
+                                                                                     current_is_reroll)
 
                     if fake_name:
                         logger.info(
                             f"✨ Easter Egg Triggered: Faking {player.display_name} with {fake_name} (T{fake_tier}) instead of actual {name} (T{tier})")
 
-                        fake_embed = views.create_fake_embed(player, fake_name, fake_tier)
+                        fake_embed = views.create_fake_embed(player, fake_name, fake_tier, fake_sprite_url)
                         fake_msg = await channel.send(f"{player.mention}", embed=fake_embed)
 
                         await asyncio.sleep(7)
@@ -184,26 +215,30 @@ async def next_turn(channel, bot_instance, retries=3):
 
                         await asyncio.sleep(3)
 
-                        await channel.send(views.MSG["fakeout_hariyama"])
+                        await channel.send(views.MSG["fakeout_delibird"])
                         await asyncio.sleep(2)
-
+                        await channel.send("https://24.media.tumblr.com/2453c1bcf3b7081c6e183441591560d1/tumblr_mf7hsn9oLd1rjj66yo1_r2_500.gif")
                         await channel.send(views.MSG["fakeout_reveal"].format(mention=player.mention))
+
                         await asyncio.sleep(1)
 
+                # Forced accept if out of rerolls mid-loop
                 if curr_left <= 0 and current_is_reroll:
-                    state["rosters"][player.id].append({'name': name, 'tier': tier})
+                    state["rosters"][player.id].append({'name': name, 'tier': tier, 'sprite': sprite_url})
                     state["points"][player.id] += tier
                     pts_left = config.MAX_POINTS - state["points"][player.id]
 
-                    embed = views.create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left)
+                    embed = views.create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left, sprite_url)
                     await channel.send(f"{player.mention}", embed=embed)
 
                     logger.info(f"Forced accept for {player.display_name} (0 rerolls left).")
                     break
 
+                # Show Result (This is now the REAL pull)
                 expiry_dec = int(time.time()) + config.DECISION_TIMEOUT
+
                 embed = views.create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, state['round'],
-                                                    expiry_dec)
+                                                    expiry_dec, sprite_url)
 
                 view = views.DraftView(player)
                 await channel.send(f"{player.mention}", embed=embed, view=view)
@@ -216,12 +251,25 @@ async def next_turn(channel, bot_instance, retries=3):
 
                     logger.info(f"🔄 {clicker} hit REROLL on {name}. Rerolls remaining: {new_left}")
                     await channel.send(views.MSG["action_reroll"].format(clicker=clicker, left=new_left))
+
+                    # 🔔 SEND THE "OUT OF REROLLS" DM IF THEY JUST HIT ZERO
+                    if new_left == 0 and hasattr(player, "send"):
+                        try:
+                            out_embed = discord.Embed(
+                                description=views.MSG.get("dm_out_of_rerolls", "Te has quedado sin reintentos."),
+                                color=0xe74c3c
+                            )
+                            await player.send(embed=out_embed)
+                            logger.info(f"Sent 'Out of Rerolls' DM to {player.display_name}")
+                        except Exception as e:
+                            logger.error(f"Failed to send 'Out of Rerolls' DM to {player.display_name}: {e}")
+
                     state["burned"].append(name)
                     current_is_reroll = True
                     continue
 
                 else:
-                    state["rosters"][player.id].append({'name': name, 'tier': tier})
+                    state["rosters"][player.id].append({'name': name, 'tier': tier, 'sprite': sprite_url})
                     state["points"][player.id] += tier
 
                     if view.value == "KEEP":

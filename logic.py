@@ -180,7 +180,7 @@ def get_valid_candidates(user_id, pick_number=None, is_reroll=False):
         # Check if they can actually afford a mega before forcing it
         points_spent = draft_state["points"].get(user_id, 0)
         max_affordable_now = (config.MAX_POINTS - points_spent) - (
-                    (config.TOTAL_POKEMON - pick_number) * config.MIN_TIER_COST)
+                (config.TOTAL_POKEMON - pick_number) * config.MIN_TIER_COST)
         megas_only = candidates[candidates['mega'] == 'Y']
 
         if not megas_only.empty and max_affordable_now >= megas_only['tier'].min():
@@ -285,15 +285,16 @@ def roll_pokemon(valid_tiers, user_id, pick_number, is_reroll=False):
     Executes the RNG roll.
     1. Weighted Random Choice of Tier.
     2. Uniform Random Choice of Pokemon within that Tier.
+    Returns: Name, Tier, Sprite URL
     """
     if not valid_tiers:
         logger.error(f"roll_pokemon failed: No valid_tiers provided for User {user_id}")
-        return None, "NO_VALID_TIERS"
+        return None, "NO_VALID_TIERS", ""
 
     current_sum = sum(config.TIER_PROBS[t] for t in valid_tiers)
     if current_sum == 0:
         logger.error(f"roll_pokemon failed: TIER_PROBS sum is zero for valid tiers: {valid_tiers}")
-        return None, "ZERO_SUM"
+        return None, "ZERO_SUM", ""
 
     weights = [config.TIER_PROBS[t] / current_sum for t in valid_tiers]
     selected_tier = random.choices(valid_tiers, weights=weights, k=1)[0]
@@ -306,29 +307,39 @@ def roll_pokemon(valid_tiers, user_id, pick_number, is_reroll=False):
     if tier_pool.empty:
         logger.error(
             f"roll_pokemon failed: Selected Tier {selected_tier} is empty! This should not happen if valid_tiers was built correctly.")
-        return None, "EMPTY_TIER_POOL"
+        return None, "EMPTY_TIER_POOL", ""
 
     picked = tier_pool.sample(n=1).iloc[0]
-    return picked['name'], int(picked['tier'])
+
+    # Safely extract the sprite URL using 'sprite' (singular) as defined in your CSV
+    sprite_url = str(picked['sprite']) if 'sprite' in picked else ""
+    if sprite_url.lower() == "nan": sprite_url = ""
+
+    return picked['name'], int(picked['tier']), sprite_url
 
 
 # --- EASTER EGG HELPER ---
 def get_fake_candidate(user_id, pick_number, is_reroll):
     """
     Finds a Pokemon from Tiers 300 or 260 from the available pool.
-    Used for the Hariyama Fake Out Easter Egg.
+    Used for the Delibird Fake Out Easter Egg.
+    Returns: Name, Tier, Sprite URL
     """
     candidates = get_valid_candidates(user_id, pick_number, is_reroll)
     high_tiers = candidates[candidates['tier'].isin([300, 260])]
 
     if high_tiers.empty:
         # Fallback: Just grab any unpicked Tier 300/260 globally
-        # (In case their family lock or mega cap removed them all from their personal valid pool)
         all_picked = [p['name'] for roster in draft_state["rosters"].values() for p in roster]
         high_tiers = pokemon_db[(pokemon_db['tier'].isin([300, 260])) & (~pokemon_db['name'].isin(all_picked))]
 
         if high_tiers.empty:
-            return None, None
+            return None, None, ""
 
     picked = high_tiers.sample(n=1).iloc[0]
-    return picked['name'], int(picked['tier'])
+
+    # Safely extract the sprite URL
+    sprite_url = str(picked['sprite']) if 'sprite' in picked else ""
+    if sprite_url.lower() == "nan": sprite_url = ""
+
+    return picked['name'], int(picked['tier']), sprite_url
