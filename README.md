@@ -1,7 +1,6 @@
 # Kokoloko Draft — a Discord bot
 
-This repo consist of a Docker container cloned from my dev env repo and includes the .py files that describe a Discord bot.
-
+This repo consist of a Docker container and includes the .py files that describe a Discord bot.
 
 The repo can be cloned to run a bot that manages a Kokoloko Draft, which is a self-coined term for a Pokémon Draft with semi-randomly picked Pokémon
 
