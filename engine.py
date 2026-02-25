@@ -28,6 +28,35 @@ async def next_turn(channel, bot_instance, retries=3):
                     await channel.send(views.MSG["draft_complete"])
                     for embed in views.create_summary_embed(state):
                         await channel.send(embed=embed)
+
+                    seen_players = set()
+                    for player_obj in state["order"]:
+                        if player_obj.id not in seen_players:
+                            seen_players.add(player_obj.id)
+                            if hasattr(player_obj, "send"):
+                                try:
+                                    await player_obj.send(views.MSG.get("dm_draft_over",
+                                                                        "El Kokoloko Draft ha concluido. Aquí está el resumen de tu equipo final:"))
+
+                                    personal_embed = views.create_personal_summary_embed(player_obj, state)
+                                    roster = state["rosters"].get(player_obj.id, [])
+
+                                    # Generate the composite image file
+                                    file_attachment = await views.create_roster_image_file(roster,
+                                                                                           f"{player_obj.id}_roster.png")
+
+                                    if file_attachment:
+                                        # Bind the local file attachment to the embed image slot
+                                        personal_embed.set_image(url=f"attachment://{file_attachment.filename}")
+                                        await player_obj.send(embed=personal_embed, file=file_attachment)
+                                    else:
+                                        await player_obj.send(embed=personal_embed)
+
+                                except discord.Forbidden:
+                                    logger.warning(f"Could not send final DM to {player_obj.display_name}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send final DM to {player_obj.display_name}: {e}")
+
                     state["active"] = False
                     print("🏁 [ENGINE] Draft Complete.")
                     logger.info("🏁 Draft Complete - Summary sent.")
@@ -39,13 +68,24 @@ async def next_turn(channel, bot_instance, retries=3):
 
             mode = state.get("auto_mode", 0)
             if mode != 2:
+                # 1. Announce the start of the new round in the thread
                 await channel.send(views.MSG["end_of_round"].format(round_num=state['round']))
 
-                # Displays the summary exactly at the beginning of Round 3 and beyond
-                if state["round"] > 2:
-                    logger.info(f"Displaying auto-summary for start of Round {state['round']}")
-                    for embed in views.create_summary_embed(state):
-                        await channel.send(embed=embed)
+                # 2. Send the GLOBAL summary to the PARENT channel after every round
+                if state["round"] > 1:
+                    finished_round = state["round"] - 1
+                    logger.info(f"Sending global auto-summary to parent channel for end of Round {finished_round}")
+                    try:
+                        # Send your new Spanish text
+                        await channel.parent.send(views.MSG["announce_round_summary"].format(round_num=finished_round))
+
+                        # Send the full list of all coaches
+                        for embed in views.create_summary_embed(state):
+                            await channel.parent.send(embed=embed)
+                    except discord.Forbidden:
+                        logger.warning("Could not send summary to parent channel (Permissions missing).")
+                    except Exception as e:
+                        logger.error(f"Failed to send round summary to parent: {e}")
 
                 logger.info(f"--- STARTING ROUND {state['round']} ---")
                 await asyncio.sleep(1)
@@ -181,6 +221,8 @@ async def next_turn(channel, bot_instance, retries=3):
                 await start_msg.edit(embed=embed_start, view=None)
 
             current_is_reroll = False
+            summary_used_this_turn = False  # Tracks if the button was clicked this turn
+
             while True:
                 curr_rr = state["rerolls"].get(player.id, 0)
                 curr_left = config.MAX_REROLLS - curr_rr
@@ -234,25 +276,40 @@ async def next_turn(channel, bot_instance, retries=3):
                     logger.info(f"Forced accept for {player.display_name} (0 rerolls left).")
                     break
 
-                # Show Result (This is now the REAL pull)
-                expiry_dec = int(time.time()) + config.DECISION_TIMEOUT
+                # --- INNER LOOP: UI DISPLAY ---
+                while True:
+                    expiry_dec = int(time.time()) + config.DECISION_TIMEOUT
 
-                embed = views.create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, state['round'],
-                                                    expiry_dec, sprite_url)
+                    embed = views.create_decision_embed(player, pick_num, name, tier, pts_left, curr_left,
+                                                        state['round'], expiry_dec, sprite_url)
 
-                view = views.DraftView(player)
-                await channel.send(f"{player.mention}", embed=embed, view=view)
-                await view.wait()
+                    view = views.DraftView(player, show_summary=not summary_used_this_turn)
+                    await channel.send(f"{player.mention}", embed=embed, view=view)
+                    await view.wait()
 
+                    if view.value == "SUMMARY":
+                        summary_used_this_turn = True
+                        logger.info(f"{player.display_name} requested personal summary.")
+
+                        # Call the personal summary embed instead of the global one
+                        personal_embed = views.create_personal_summary_embed(player, state)
+                        await channel.send(embed=personal_embed)
+
+                        # Restart the inner loop to bring the card back to the front
+                        continue
+
+                    # Exit inner loop if user clicked Keep, Reroll, or timed out
+                    break
+
+                # --- PROCESS RESULT ---
                 if view.value == "REROLL":
                     state["rerolls"][player.id] += 1
                     new_left = config.MAX_REROLLS - state["rerolls"][player.id]
                     clicker = view.clicked_by.display_name if view.clicked_by else "Staff"
 
-                    logger.info(f"🔄 {clicker} hit REROLL on {name}. Rerolls remaining: {new_left}")
+                    logger.info(f"{clicker} hit REROLL on {name}. Rerolls remaining: {new_left}")
                     await channel.send(views.MSG["action_reroll"].format(clicker=clicker, left=new_left))
 
-                    # 🔔 SEND THE "OUT OF REROLLS" DM IF THEY JUST HIT ZERO
                     if new_left == 0 and hasattr(player, "send"):
                         try:
                             out_embed = discord.Embed(
@@ -260,7 +317,6 @@ async def next_turn(channel, bot_instance, retries=3):
                                 color=0xe74c3c
                             )
                             await player.send(embed=out_embed)
-                            logger.info(f"Sent 'Out of Rerolls' DM to {player.display_name}")
                         except Exception as e:
                             logger.error(f"Failed to send 'Out of Rerolls' DM to {player.display_name}: {e}")
 
@@ -277,7 +333,7 @@ async def next_turn(channel, bot_instance, retries=3):
                     else:
                         msg = views.MSG["action_timeout"].format(name=name)
 
-                    logger.info(f"✅ {name} kept by {player.display_name} (Trigger: {view.value})")
+                    logger.info(f"{name} kept by {player.display_name} (Trigger: {view.value})")
                     await channel.send(msg)
                     break
 

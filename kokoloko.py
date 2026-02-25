@@ -36,7 +36,7 @@ class DummyPlayer:
         self.id, self.display_name, self.mention, self.name = id, name, f"@{name}", name
 
 
-TEST_DUMMIES = [DummyPlayer(9000 + i, f"Bot_{i}") for i in range(1, 17)]
+TEST_DUMMIES = [DummyPlayer(9000 + i, f"Dummy_{i}") for i in range(1, 8)]
 # TEST_DUMMIES = [] # Uncomment to disable
 
 # ==========================================

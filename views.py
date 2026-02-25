@@ -2,6 +2,10 @@ import discord
 import config
 import logic
 import logging
+import io
+import asyncio
+import aiohttp
+from PIL import Image
 
 logger = logging.getLogger("views")
 
@@ -21,7 +25,7 @@ MSG = {
     "err_no_players": "❌ ¡Necesitas incluir a los jugadores!",
     "setup_mode_title": "🔧 Modo",
     "setup_mode_desc": "Selecciona el modo:",
-    "announce_parent": "📢 ¡El Kokoloko Draft acaba de iniciar! Entra en el hilo {thread_mention} para ver la selección {ping_text}",
+    "announce_parent": "📢 ¡El Kokoloko Draft acaba de iniciar! Entra en el hilo {thread_mention} para ver la selección || {ping_text} ||",
     "draft_started": "🏆 **¡Draft iniciado!**\nOrden: {names}",
     "err_draft_active": "🚫 ¡Ya hay un draft en curso! Usa `!cancel_draft` para detenerlo primero.",
     "draft_cancelled": "🛑 **El draft ha sido cancelado forzosamente por un administrador.**",
@@ -43,7 +47,8 @@ MSG = {
     "action_timeout": "⏰ Tiempo agotado: se aceptó automáticamente **{name}**.",
     "err_api_fatal": "🚨 **FATAL:** Discord API is continuously rejecting our connection. The draft has paused.",
     "err_bot_crash": "🚨 A bot error occurred. The draft loop has paused. Check `kokoloko.log` for details.",
-    "dm_out_of_rerolls": "🔔 **Aviso:** ¡Te has quedado sin reintentos! \nA partir de ahora tus Pokémon serán aceptados automáticamente y ya no recibirás recordatorios de turno."
+    "dm_out_of_rerolls": "🔔 **Aviso:** ¡Te has quedado sin reintentos! \nA partir de ahora tus Pokémon serán aceptados automáticamente y ya no recibirás recordatorios de turno.",
+    "announce_round_summary": "📢 Terminó la Ronda #{round_num} del Kokoloko Draft y así van los equipos de los coaches hasta el momento:"
 
 }
 
@@ -142,6 +147,24 @@ def create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, rou
     return embed
 
 
+def create_personal_summary_embed(player, draft_state):
+    """
+    Generates a compact summary embed for a single player.
+    Used by the mid-turn 'Resumen' button to avoid channel bloat.
+    """
+    roster = draft_state["rosters"].get(player.id, [])
+    points_spent = draft_state["points"].get(player.id, 0)
+    points_left = config.MAX_POINTS - points_spent
+    rerolls_left = config.MAX_REROLLS - draft_state["rerolls"].get(player.id, 0)
+
+    embed = discord.Embed(title=f"📊 Resumen Personal • {player.display_name}", color=0x3498db)
+
+    p_list = "\n".join([f"• **{p['name']}** (Tier {p['tier']})" for p in roster]) if roster else "*(Sin Pokémon)*"
+    val = f"{p_list}\n-------------------\n💰 **Pts:** {points_spent} (Restantes: {points_left})\n🎲 **Reintentos:** {rerolls_left}"
+
+    embed.add_field(name="Tu Equipo Actual", value=val, inline=False)
+    return embed
+
 def create_summary_embed(draft_state):
     """
     Generates a Paginated Summary (List of Embeds) to avoid Discord char limits.
@@ -175,7 +198,59 @@ def create_summary_embed(draft_state):
         embeds.append(embed)
     return embeds
 
+async def fetch_image(session, url):
+    """Asynchronously downloads an image and returns a Pillow Image object."""
+    try:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.read()
+                return Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception as e:
+        logger.error(f"Failed to fetch image {url}: {e}")
+    return None
 
+
+async def create_roster_image_file(roster, filename="roster.png"):
+    """
+    Downloads up to 10 sprites concurrently and stitches them into a 5x2 grid.
+    Returns a discord.File object ready for upload.
+    """
+    urls = [p['sprite'] for p in roster if p.get('sprite') and p['sprite'].startswith("http")]
+    if not urls:
+        return None
+
+    # Concurrently fetch all images
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_image(session, url) for url in urls]
+        results = await asyncio.gather(*tasks)
+
+    images = [img for img in results if img]
+    if not images:
+        return None
+
+    # Calculate grid dimensions (5 columns, 2 rows max)
+    box_size = 100
+    cols = 5
+    rows = (len(images) + cols - 1) // cols
+    bg_width = cols * box_size
+    bg_height = rows * box_size
+
+    # Create transparent background
+    grid = Image.new("RGBA", (bg_width, bg_height), (255, 255, 255, 0))
+
+    # Paste images into the grid
+    for idx, img in enumerate(images):
+        img.thumbnail((box_size, box_size))
+        x = (idx % cols) * box_size + (box_size - img.width) // 2
+        y = (idx // cols) * box_size + (box_size - img.height) // 2
+        grid.paste(img, (x, y), img)
+
+    # Save to a memory buffer instead of disk
+    buffer = io.BytesIO()
+    grid.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    return discord.File(fp=buffer, filename=filename)
 # ==========================================
 # 🔘 INTERACTIVE BUTTON VIEWS
 # ==========================================
@@ -266,11 +341,18 @@ class RollView(discord.ui.View):
 
 
 class DraftView(discord.ui.View):
-    def __init__(self, coach_user):
+    def __init__(self, coach_user, show_summary=True):
         super().__init__(timeout=config.DECISION_TIMEOUT)
         self.coach = coach_user
         self.value = None
         self.clicked_by = None
+
+        # Dynamically remove the Summary button if it has already been used this turn
+        if not show_summary:
+            for child in self.children:
+                if getattr(child, "label", "") == "📊 Resumen":
+                    self.remove_item(child)
+                    break
 
     async def check_permissions(self, interaction):
         if interaction.user.id != self.coach.id and not discord.utils.get(interaction.user.roles,
@@ -280,8 +362,18 @@ class DraftView(discord.ui.View):
         return True
 
     async def disable_all(self, interaction):
-        for child in self.children: child.disabled = True
-        await interaction.response.edit_message(view=self)
+        for child in self.children:
+            child.disabled = True
+
+        try:
+            # Check if Discord already processed this interaction (prevents double-click errors)
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(view=self)
+        except discord.errors.NotFound:
+            # If the token expired due to lag, we just ignore it safely
+            logger.debug("Interaction token expired or double-clicked. Ignoring safely.")
+        except Exception as e:
+            logger.error(f"Unexpected error in disable_all: {e}")
 
     @discord.ui.button(label="✅ Aceptar", style=discord.ButtonStyle.success)
     async def keep(self, interaction, button):
@@ -298,5 +390,14 @@ class DraftView(discord.ui.View):
         self.value = "REROLL"
         self.clicked_by = interaction.user
         logger.debug(f"{interaction.user.display_name} chose to REROLL.")
+        await self.disable_all(interaction)
+        self.stop()
+
+    @discord.ui.button(label="📊 Resumen", style=discord.ButtonStyle.secondary)
+    async def summary_btn(self, interaction, button):
+        if not await self.check_permissions(interaction): return
+        self.value = "SUMMARY"
+        self.clicked_by = interaction.user
+        logger.debug(f"{interaction.user.display_name} requested a mid-turn SUMMARY.")
         await self.disable_all(interaction)
         self.stop()

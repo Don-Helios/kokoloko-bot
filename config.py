@@ -56,8 +56,8 @@ TIER_PROBS = {
 STAFF_ROLE_NAME = "NPO-Draft Staff"
 
 # --- EASTER EGGS ---
-# 0.032 = 3.2% Chance for Hariyama Fake Out to trigger on a pull of Tier 60 or less.
-FAKE_OUT_CHANCE = 0.50
+# 0.032 = 3.2% Chance for Delibird Fake Out to trigger on a pull of Tier 60 or less.
+FAKE_OUT_CHANCE = 0.20
 
 # ==========================================
 # 🧵 THREAD & ANNOUNCEMENT SETTINGS
@@ -65,7 +65,7 @@ FAKE_OUT_CHANCE = 0.50
 # The exact name of the thread where the bot is allowed to operate.
 THREAD_NAME = "kokoloko-draft"
 # The exact name of the role to ping when a draft starts.
-PING_ROLE_NAME = "Daft"
+PING_ROLE_NAME = "Draft"
 
 # ==========================================
 # 📝 LOGGING SETTINGS
