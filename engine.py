@@ -22,31 +22,40 @@ async def next_turn(channel, bot_instance, retries=3):
         # =========================================
         # 1. ROUND MANAGEMENT
         # =========================================
+        # =========================================
+        # 1. ROUND MANAGEMENT
+        # =========================================
         if state["current_index"] >= len(state["order"]):
             if state["round"] >= config.TOTAL_POKEMON:
                 if state["active"]:
+                    # 1. Announce locally in the thread
                     await channel.send(views.MSG["draft_complete"])
                     for embed in views.create_summary_embed(state):
                         await channel.send(embed=embed)
 
+                    # 2. 📢 ANNOUNCE ROUND 10 (FINAL) TO PARENT CHANNEL
+                    try:
+                        await channel.parent.send(views.MSG.get("announce_draft_complete_parent", "🏁 **¡El Kokoloko Draft ha concluido!** Equipos finales:"))
+                        for embed in views.create_summary_embed(state):
+                            await channel.parent.send(embed=embed)
+                    except Exception as e:
+                        logger.error(f"Failed to send final summary to parent: {e}")
+
+                    # 3. Process final direct messages for all unique participants
                     seen_players = set()
                     for player_obj in state["order"]:
                         if player_obj.id not in seen_players:
                             seen_players.add(player_obj.id)
                             if hasattr(player_obj, "send"):
                                 try:
-                                    await player_obj.send(views.MSG.get("dm_draft_over",
-                                                                        "El Kokoloko Draft ha concluido. Aquí está el resumen de tu equipo final:"))
+                                    await player_obj.send(views.MSG.get("dm_draft_over", "El Kokoloko Draft ha concluido. Aquí está el resumen de tu equipo final:"))
 
                                     personal_embed = views.create_personal_summary_embed(player_obj, state)
                                     roster = state["rosters"].get(player_obj.id, [])
 
-                                    # Generate the composite image file
-                                    file_attachment = await views.create_roster_image_file(roster,
-                                                                                           f"{player_obj.id}_roster.png")
+                                    file_attachment = await views.create_roster_image_file(roster, f"{player_obj.id}_roster.png")
 
                                     if file_attachment:
-                                        # Bind the local file attachment to the embed image slot
                                         personal_embed.set_image(url=f"attachment://{file_attachment.filename}")
                                         await player_obj.send(embed=personal_embed, file=file_attachment)
                                     else:
@@ -68,18 +77,15 @@ async def next_turn(channel, bot_instance, retries=3):
 
             mode = state.get("auto_mode", 0)
             if mode != 2:
-                # 1. Announce the start of the new round in the thread
+                # Announce the start of the new round in the thread
                 await channel.send(views.MSG["end_of_round"].format(round_num=state['round']))
 
-                # 2. Send the GLOBAL summary to the PARENT channel after every round
-                if state["round"] > 1:
-                    finished_round = state["round"] - 1
+                # 📢 ANNOUNCE EVEN ROUNDS (2, 4, 6, 8) TO PARENT CHANNEL
+                finished_round = state["round"] - 1
+                if finished_round % 2 == 0:
                     logger.info(f"Sending global auto-summary to parent channel for end of Round {finished_round}")
                     try:
-                        # Send your new Spanish text
                         await channel.parent.send(views.MSG["announce_round_summary"].format(round_num=finished_round))
-
-                        # Send the full list of all coaches
                         for embed in views.create_summary_embed(state):
                             await channel.parent.send(embed=embed)
                     except discord.Forbidden:
@@ -96,6 +102,7 @@ async def next_turn(channel, bot_instance, retries=3):
         player = state["order"][state["current_index"]]
         pick_num = len(state["rosters"][player.id]) + 1
 
+        # RESTORED CRITICAL LOGIC I ACCIDENTALLY OVERWROTE
         if pick_num > config.TOTAL_POKEMON:
             state["current_index"] += 1
             await next_turn(channel, bot_instance)
@@ -107,6 +114,7 @@ async def next_turn(channel, bot_instance, retries=3):
         mode = state.get("auto_mode", 0)
 
         logger.info(f"[Turn Start] Round {state['round']}, Pick #{pick_num} for {player.display_name}")
+        # END OF RESTORED LOGIC 👆
 
         # =========================================
         # 🔔 UPCOMING TURN NOTIFICATION (DM)
@@ -238,14 +246,23 @@ async def next_turn(channel, bot_instance, retries=3):
 
                 logger.info(f"RNG generated: {name} (T{tier}) for {player.display_name}")
 
-                # ✨ FAKE OUT EASTER EGG (NEW LOGIC)
+                # === 🎰 NUEVA ANIMACIÓN DE RULETA ===
+                # Send the rolling GIF and save the message object
+                rolling_msg = await channel.send("https://24.media.tumblr.com/tumblr_lm4usrayvJ1qa9qygo1_500.gif")
+                await asyncio.sleep(5)  # 5-second suspense delay!
+
+                # === EASTER EGG LOGIC ===
                 if tier <= 60 and random.random() < config.FAKE_OUT_CHANCE:
                     fake_name, fake_tier, fake_sprite_url = logic.get_fake_candidate(player.id, pick_num,
                                                                                      current_is_reroll)
 
                     if fake_name:
                         logger.info(
-                            f"✨ Easter Egg Triggered: Faking {player.display_name} with {fake_name} (T{fake_tier}) instead of actual {name} (T{tier})")
+                            f"Easter Egg Triggered: Faking {player.display_name} with {fake_name} (T{fake_tier}) instead of actual {name} (T{tier})")
+
+                        # Delete the rolling GIF so it doesn't clutter the chat during the Easter Egg
+                        await rolling_msg.delete()
+                        rolling_msg = None
 
                         fake_embed = views.create_fake_embed(player, fake_name, fake_tier, fake_sprite_url)
                         fake_msg = await channel.send(f"{player.mention}", embed=fake_embed)
@@ -257,21 +274,28 @@ async def next_turn(channel, bot_instance, retries=3):
 
                         await asyncio.sleep(3)
 
-                        await channel.send(views.MSG["fakeout_delibird"])
+                        await channel.send(views.MSG["fakeout_hariyama"])
                         await asyncio.sleep(2)
-                        await channel.send("https://24.media.tumblr.com/2453c1bcf3b7081c6e183441591560d1/tumblr_mf7hsn9oLd1rjj66yo1_r2_500.gif")
+
                         await channel.send(views.MSG["fakeout_reveal"].format(mention=player.mention))
 
-                        await asyncio.sleep(1)
+                        await channel.send(
+                            "https://24.media.tumblr.com/2453c1bcf3b7081c6e183441591560d1/tumblr_mf7hsn9oLd1rjj66yo1_r2_500.gif")
+                        await asyncio.sleep(2)
 
-                # Forced accept if out of rerolls mid-loop
+                # === FORCED AUTO-ACCEPT (0 REROLLS) ===
                 if curr_left <= 0 and current_is_reroll:
                     state["rosters"][player.id].append({'name': name, 'tier': tier, 'sprite': sprite_url})
                     state["points"][player.id] += tier
                     pts_left = config.MAX_POINTS - state["points"][player.id]
 
                     embed = views.create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left, sprite_url)
-                    await channel.send(f"{player.mention}", embed=embed)
+
+                    # Edit the GIF into the final card, or send a new one if Easter Egg wiped it
+                    if rolling_msg:
+                        await rolling_msg.edit(content=f"{player.mention}", embed=embed)
+                    else:
+                        await channel.send(f"{player.mention}", embed=embed)
 
                     logger.info(f"Forced accept for {player.display_name} (0 rerolls left).")
                     break
@@ -282,23 +306,27 @@ async def next_turn(channel, bot_instance, retries=3):
 
                     embed = views.create_decision_embed(player, pick_num, name, tier, pts_left, curr_left,
                                                         state['round'], expiry_dec, sprite_url)
-
                     view = views.DraftView(player, show_summary=not summary_used_this_turn)
-                    await channel.send(f"{player.mention}", embed=embed, view=view)
+
+                    # 🔄 REPLACEMENT MAGIC HAPPENS HERE
+                    # We overwrite the GIF URL with the actual Embed and Buttons
+                    if rolling_msg:
+                        await rolling_msg.edit(content=f"{player.mention}", embed=embed, view=view)
+                        rolling_msg = None  # Consume the variable so the Resumen button works normally
+                    else:
+                        await channel.send(f"{player.mention}", embed=embed, view=view)
+
                     await view.wait()
 
                     if view.value == "SUMMARY":
                         summary_used_this_turn = True
                         logger.info(f"{player.display_name} requested personal summary.")
 
-                        # Call the personal summary embed instead of the global one
                         personal_embed = views.create_personal_summary_embed(player, state)
                         await channel.send(embed=personal_embed)
 
-                        # Restart the inner loop to bring the card back to the front
                         continue
 
-                    # Exit inner loop if user clicked Keep, Reroll, or timed out
                     break
 
                 # --- PROCESS RESULT ---

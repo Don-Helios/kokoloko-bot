@@ -48,7 +48,8 @@ MSG = {
     "err_api_fatal": "🚨 **FATAL:** Discord API is continuously rejecting our connection. The draft has paused.",
     "err_bot_crash": "🚨 A bot error occurred. The draft loop has paused. Check `kokoloko.log` for details.",
     "dm_out_of_rerolls": "🔔 **Aviso:** ¡Te has quedado sin reintentos! \nA partir de ahora tus Pokémon serán aceptados automáticamente y ya no recibirás recordatorios de turno.",
-    "announce_round_summary": "📢 Terminó la Ronda #{round_num} del Kokoloko Draft y así van los equipos de los coaches hasta el momento:"
+    "announce_round_summary": "📢 Terminó la Ronda #{round_num} del Kokoloko Draft y así van los equipos de los coaches hasta el momento:",
+    "announce_draft_complete_parent": "🏁 **¡El Kokoloko Draft ha concluido!** Estos son los equipos finales de todos los coaches:"
 
 }
 
