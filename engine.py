@@ -274,13 +274,11 @@ async def next_turn(channel, bot_instance, retries=3):
 
                         await asyncio.sleep(3)
 
-                        await channel.send(views.MSG["fakeout_hariyama"])
+                        await channel.send(views.MSG["fakeout_delibird"])
                         await asyncio.sleep(2)
+                        await channel.send("https://24.media.tumblr.com/2453c1bcf3b7081c6e183441591560d1/tumblr_mf7hsn9oLd1rjj66yo1_r2_500.gif")
 
                         await channel.send(views.MSG["fakeout_reveal"].format(mention=player.mention))
-
-                        await channel.send(
-                            "https://24.media.tumblr.com/2453c1bcf3b7081c6e183441591560d1/tumblr_mf7hsn9oLd1rjj66yo1_r2_500.gif")
                         await asyncio.sleep(2)
 
                 # === FORCED AUTO-ACCEPT (0 REROLLS) ===
