@@ -13,6 +13,8 @@ logger = logging.getLogger("views")
 # 💬 CENTRALIZED TEXT DICTIONARY (TRANSLATE HERE)
 # ==========================================
 # All plain text messages sent by the bot are stored here.
+# Centralizing this makes it much easier to change the bot's language or tone
+# later without having to hunt through the logical loops.
 MSG = {
     # --- Kokoloko.py (Commands & Setup) ---
     "err_thread": "🚫 Por favor usa este comando en el hilo `{thread}`.",
@@ -26,12 +28,11 @@ MSG = {
     "setup_mode_title": "🔧 Modo",
     "setup_mode_desc": "Selecciona el modo:",
     "announce_parent": "📢 ¡El Kokoloko Draft acaba de iniciar! Entra en el hilo {thread_mention} para ver la selección || {ping_text} ||",
-    "draft_started": "🏆 **¡Draft iniciado!**\nOrden: {names}",
+    "draft_started": "🏆 **¡Draft iniciado!** (ID: `{draft_id}`)\nOrden: {names}",
     "err_draft_active": "🚫 ¡Ya hay un draft en curso! Usa `!cancel_draft` para detenerlo primero.",
     "draft_cancelled": "🛑 **El draft ha sido cancelado forzosamente por un administrador.**",
     "err_no_active_draft": "⚠️ No hay ningún draft activo en este momento.",
     "err_draft_role": "🚫 Solo los miembros con el rol 'Draft' pueden usar este comando.",
-
 
     # --- Engine.py (Game Flow & Turns) ---
     "draft_complete": "🏁 **¡Draft Finalizado!**",
@@ -50,7 +51,6 @@ MSG = {
     "dm_out_of_rerolls": "🔔 **Aviso:** ¡Te has quedado sin reintentos! \nA partir de ahora tus Pokémon serán aceptados automáticamente y ya no recibirás recordatorios de turno.",
     "announce_round_summary": "📢 Terminó la Ronda #{round_num} del Kokoloko Draft y así van los equipos de los coaches hasta el momento:",
     "announce_draft_complete_parent": "🏁 **¡El Kokoloko Draft ha concluido!** Estos son los equipos finales de todos los coaches:"
-
 }
 
 
@@ -59,7 +59,10 @@ MSG = {
 # ==========================================
 
 def format_odds_grid(odds_data):
-    """Formats the tier probabilities into a clean text grid."""
+    """
+    Formats the tier probabilities into a clean text grid.
+    Used before the user clicks "Jala la palanca" so they know their odds.
+    """
     if not odds_data: return "⚠️ Sin Tiers Válidas"
     items = []
     for tier, pct in odds_data.items():
@@ -70,6 +73,8 @@ def format_odds_grid(odds_data):
         else:
             icon = "🔹"
         items.append(f"{icon} **T{tier}:** `{pct:.1f}%`")
+
+    # Arrange into two columns
     grid_rows = []
     for i in range(0, len(items), 2):
         left = items[i]
@@ -83,7 +88,7 @@ def format_odds_grid(odds_data):
 # ==========================================
 
 def create_roll_embed(player, pick_num, expiry_time, odds_grid_str):
-    """Standard pre-roll embed."""
+    """Standard pre-roll embed asking the user to start their turn."""
     return discord.Embed(
         title=f"🃏 Pokémon #{pick_num} • {player.display_name}",
         description=f"¡Toca el botón para girar!\n⏳ **Lanzamiento automático en** <t:{expiry_time}:R>\n\n**Probabilidades:**\n{odds_grid_str}",
@@ -132,7 +137,7 @@ def create_auto_accept_embed(player, pick_num, name, tier, mode, pts_left, sprit
 
 
 def create_decision_embed(player, pick_num, name, tier, pts_left, curr_left, round_num, expiry_dec, sprite_url):
-    """Embed shown showing the rolled Pokémon, asking Keep/Reroll."""
+    """Main action embed showing the rolled Pokémon, asking Keep/Reroll."""
     embed = discord.Embed(
         title=f"Pokémon #{pick_num} • {player.display_name}",
         description=f"⏳ **Decide en** <t:{expiry_dec}:R>\n(Ronda {round_num})",
@@ -166,9 +171,11 @@ def create_personal_summary_embed(player, draft_state):
     embed.add_field(name="Tu Equipo Actual", value=val, inline=False)
     return embed
 
+
 def create_summary_embed(draft_state):
     """
     Generates a Paginated Summary (List of Embeds) to avoid Discord char limits.
+    Sent to the parent channel periodically and at the end of the draft.
     """
     if not draft_state["rosters"]:
         return [discord.Embed(title="📊 Sin información", description="El Draft no ha iniciado aún.")]
@@ -186,6 +193,7 @@ def create_summary_embed(draft_state):
         page_num = (i // CHUNK_SIZE) + 1
         total_pages = (len(unique_players) + CHUNK_SIZE - 1) // CHUNK_SIZE
         embed = discord.Embed(title=f"📊 Resumen del Draft ({page_num}/{total_pages})", color=0x3498db)
+
         for player in chunk:
             roster = draft_state["rosters"].get(player.id, [])
             points_spent = draft_state["points"].get(player.id, 0)
@@ -196,11 +204,17 @@ def create_summary_embed(draft_state):
             val = f"{p_list}\n-------------------\n💰 **Pts:** {points_spent} (Restantes: {points_left})\n🎲 **Reintentos:** {rerolls_left}"
             if len(val) > 1020: val = val[:1015] + "..."
             embed.add_field(name=f"👤 {player.display_name}", value=val, inline=True)
+
         embeds.append(embed)
     return embeds
 
+
+# ==========================================
+# 🖼️ IMAGE PROCESSING (PILLOW)
+# ==========================================
+
 async def fetch_image(session, url):
-    """Asynchronously downloads an image and returns a Pillow Image object."""
+    """Asynchronously downloads a sprite image and returns a Pillow Image object."""
     try:
         async with session.get(url) as resp:
             if resp.status == 200:
@@ -214,13 +228,13 @@ async def fetch_image(session, url):
 async def create_roster_image_file(roster, filename="roster.png"):
     """
     Downloads up to 10 sprites concurrently and stitches them into a 5x2 grid.
-    Returns a discord.File object ready for upload.
+    Returns a discord.File object ready to be attached to a Discord message.
     """
     urls = [p['sprite'] for p in roster if p.get('sprite') and p['sprite'].startswith("http")]
     if not urls:
         return None
 
-    # Concurrently fetch all images
+    # Concurrently fetch all images to speed up generation
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_image(session, url) for url in urls]
         results = await asyncio.gather(*tasks)
@@ -246,12 +260,14 @@ async def create_roster_image_file(roster, filename="roster.png"):
         y = (idx // cols) * box_size + (box_size - img.height) // 2
         grid.paste(img, (x, y), img)
 
-    # Save to a memory buffer instead of disk
+    # Save to a memory buffer instead of writing to disk
     buffer = io.BytesIO()
     grid.save(buffer, format="PNG")
     buffer.seek(0)
 
     return discord.File(fp=buffer, filename=filename)
+
+
 # ==========================================
 # 🔘 INTERACTIVE BUTTON VIEWS
 # ==========================================
@@ -272,7 +288,15 @@ class DummyCheckView(discord.ui.View):
         if not await self.check_staff(interaction): return
         self.value = True
         logger.debug(f"{interaction.user} selected YES to dummies.")
-        await interaction.response.edit_message(content="✅ **Dummies habilitados**", view=None, embed=None)
+
+        # --- SHOCK ABSORBER ---
+        # Prevents 404 Not Found error if the token expired or button was double-clicked
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="✅ **Dummies habilitados**", view=None, embed=None)
+        except discord.errors.NotFound:
+            logger.debug("Interaction token expired. Ignoring safely.")
+
         self.stop()
 
     @discord.ui.button(label="No, sin Dummies", style=discord.ButtonStyle.secondary, emoji="👤")
@@ -280,7 +304,13 @@ class DummyCheckView(discord.ui.View):
         if not await self.check_staff(interaction): return
         self.value = False
         logger.debug(f"{interaction.user} selected NO to dummies.")
-        await interaction.response.edit_message(content="❌ **Dummies Deshabilitados**", view=None, embed=None)
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="❌ **Dummies Deshabilitados**", view=None, embed=None)
+        except discord.errors.NotFound:
+            logger.debug("Interaction token expired. Ignoring safely.")
+
         self.stop()
 
 
@@ -300,7 +330,13 @@ class ModeSelectionView(discord.ui.View):
         if not await self.check_staff(interaction): return
         self.value = 0
         logger.debug(f"{interaction.user} selected Interactive Mode.")
-        await interaction.response.edit_message(content="✅ **Interactivo**", view=None, embed=None)
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="✅ **Interactivo**", view=None, embed=None)
+        except discord.errors.NotFound:
+            logger.debug("Interaction token expired. Ignoring safely.")
+
         self.stop()
 
     @discord.ui.button(label="Auto aceptar", style=discord.ButtonStyle.success, emoji="🟢")
@@ -308,7 +344,13 @@ class ModeSelectionView(discord.ui.View):
         if not await self.check_staff(interaction): return
         self.value = 1
         logger.debug(f"{interaction.user} selected Auto Public Mode.")
-        await interaction.response.edit_message(content="✅ **Auto aceptar**", view=None, embed=None)
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="✅ **Auto aceptar**", view=None, embed=None)
+        except discord.errors.NotFound:
+            logger.debug("Interaction token expired. Ignoring safely.")
+
         self.stop()
 
     @discord.ui.button(label="Simulación rápida", style=discord.ButtonStyle.secondary, emoji="🤫")
@@ -316,7 +358,13 @@ class ModeSelectionView(discord.ui.View):
         if not await self.check_staff(interaction): return
         self.value = 2
         logger.debug(f"{interaction.user} selected Auto Silent Mode.")
-        await interaction.response.edit_message(content="✅ **Simulación rápida**", view=None, embed=None)
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="✅ **Simulación rápida**", view=None, embed=None)
+        except discord.errors.NotFound:
+            logger.debug("Interaction token expired. Ignoring safely.")
+
         self.stop()
 
 
@@ -327,8 +375,17 @@ class RollView(discord.ui.View):
         self.clicked = False
 
     async def disable_all(self, interaction):
-        for child in self.children: child.disabled = True
-        await interaction.response.edit_message(view=self)
+        for child in self.children:
+            child.disabled = True
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(view=self)
+        except discord.errors.NotFound:
+            # Handles errors if the 5-second GIF delay causes the token to expire
+            logger.debug("Interaction token expired or double-clicked. Ignoring safely.")
+        except Exception as e:
+            logger.error(f"Unexpected error in disable_all: {e}")
 
     @discord.ui.button(label="🎰 Jala la palanca", style=discord.ButtonStyle.primary, emoji="🎲")
     async def roll_button(self, interaction, button):
@@ -371,7 +428,7 @@ class DraftView(discord.ui.View):
             if not interaction.response.is_done():
                 await interaction.response.edit_message(view=self)
         except discord.errors.NotFound:
-            # If the token expired due to lag, we just ignore it safely
+            # If the token expired due to lag or timing sequences, ignore it safely
             logger.debug("Interaction token expired or double-clicked. Ignoring safely.")
         except Exception as e:
             logger.error(f"Unexpected error in disable_all: {e}")

@@ -6,6 +6,8 @@ import views
 import engine
 import logging
 import sys
+import random
+import uuid
 
 # ==========================================
 # 📝 MASTER LOGGING SETUP
@@ -158,9 +160,14 @@ async def start_draft(ctx, *members: discord.Member):
         logger.info("Draft setup cancelled (Timeout on Mode select).")
         return await m.edit(content=views.MSG["timeout"], embed=None, view=None)
 
+    # === NEW: RANDOMIZE ORDER AND GENERATE DRAFT ID ===
+    random.shuffle(final)
+    draft_id = uuid.uuid4().hex[:6].upper() # Creates a short, unique ID like "9A4F2B"
+
     logic.initialize_draft(final)
     logic.draft_state["auto_mode"] = v.value
-    logger.info(f"Draft initialized successfully. Mode: {v.value}, Players: {len(final)}")
+    logic.draft_state["draft_id"] = draft_id # Store it in the state dictionary
+    logger.info(f"[Draft ID: {draft_id}] Draft initialized successfully. Mode: {v.value}, Players: {len(final)}")
 
     if v.value != 2:
         role_to_ping = discord.utils.get(ctx.guild.roles, name=config.PING_ROLE_NAME)
@@ -170,16 +177,17 @@ async def start_draft(ctx, *members: discord.Member):
 
         try:
             await ctx.channel.parent.send(announcement_msg)
-            logger.info(f"Announcement sent to parent channel: {ctx.channel.parent.name}")
+            logger.info(f"[Draft ID: {draft_id}] Announcement sent to parent channel: {ctx.channel.parent.name}")
         except discord.Forbidden:
-            logger.error("Failed to announce: Bot lacks 'Send Messages' permission in the parent channel.")
+            logger.error(f"[Draft ID: {draft_id}] Failed to announce: Bot lacks 'Send Messages' permission in the parent channel.")
         except Exception as e:
-            logger.error(f"Failed to send announcement: {e}")
+            logger.error(f"[Draft ID: {draft_id}] Failed to send announcement: {e}")
 
+        # Extract the names in their newly randomized order
         names = ", ".join([p.display_name for p in final])
-        await ctx.send(views.MSG["draft_started"].format(names=names))
+        await ctx.send(views.MSG["draft_started"].format(draft_id=draft_id, names=names))
     else:
-        logger.info("🏆 [SILENT] Started")
+        logger.info(f"🏆 [Draft ID: {draft_id}] [SILENT] Started")
 
     await engine.next_turn(ctx.channel, bot)
 
