@@ -38,34 +38,34 @@ async def next_turn(channel, bot_instance, retries=3):
                     except Exception as e:
                         logger.error(f"Failed to send final summary to parent: {e}")
 
-                        # 3. Process final direct messages for all unique participants
-                        seen_players = set()
-                        for player_obj in state["order"]:
-                            if player_obj.id not in seen_players:
-                                seen_players.add(player_obj.id)
-                                if hasattr(player_obj, "send"):
-                                    try:
-                                        await player_obj.send(views.MSG.get("dm_draft_over", "El Kokoloko Draft ha concluido. Aquí está el resumen de tu equipo final:"))
+                    # 3. Process final direct messages for all unique participants
+                    seen_players = set()
+                    for player_obj in state["order"]:
+                        if player_obj.id not in seen_players:
+                            seen_players.add(player_obj.id)
+                            if hasattr(player_obj, "send"):
+                                try:
+                                    await player_obj.send(views.MSG.get("dm_draft_over", "El Kokoloko Draft ha concluido. Aquí está el resumen de tu equipo final:"))
 
-                                        personal_embed = views.create_personal_summary_embed(player_obj, state)
-                                        roster = state["rosters"].get(player_obj.id, [])
+                                    personal_embed = views.create_personal_summary_embed(player_obj, state)
+                                    roster = state["rosters"].get(player_obj.id, [])
 
-                                        file_attachment = await views.create_roster_image_file(roster,f"{player_obj.id}_roster.png")
+                                    file_attachment = await views.create_roster_image_file(roster,f"{player_obj.id}_roster.png")
 
-                                        if file_attachment:
-                                            personal_embed.set_image(url=f"attachment://{file_attachment.filename}")
-                                            await player_obj.send(embed=personal_embed, file=file_attachment)
-                                        else:
-                                            await player_obj.send(embed=personal_embed)
+                                    if file_attachment:
+                                        personal_embed.set_image(url=f"attachment://{file_attachment.filename}")
+                                        await player_obj.send(embed=personal_embed, file=file_attachment)
+                                    else:
+                                        await player_obj.send(embed=personal_embed)
 
-                                    except discord.Forbidden:
-                                        logger.warning(f"Could not send final DM to {player_obj.display_name}")
-                                    except Exception as e:
-                                        logger.error(f"Failed to send final DM to {player_obj.display_name}: {e}")
+                                except discord.Forbidden:
+                                    logger.warning(f"Could not send final DM to {player_obj.display_name}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send final DM to {player_obj.display_name}: {e}")
 
-                                    # ---> THE FIX: Pace the API requests to prevent Rate-Limiting <---
-                                    await asyncio.sleep(2)
-                                    logger.info(f"Sent final DM to {player_obj.display_name}: {e}")
+                                # ---> THE FIX: Pace the API requests to prevent Rate-Limiting <---
+                                await asyncio.sleep(2)
+                                logger.info(f"Sent final DM to {player_obj.display_name}: {e}")
 
                     state["active"] = False
                     print("🏁 [ENGINE] Draft Complete.")
