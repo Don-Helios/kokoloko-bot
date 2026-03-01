@@ -309,6 +309,7 @@ async def next_turn(channel, bot_instance, retries=3):
                     break
 
                 # --- INNER LOOP: UI DISPLAY ---
+                card_msg = None
                 while True:
                     expiry_dec = int(time.time()) + config.DECISION_TIMEOUT
 
@@ -319,13 +320,12 @@ async def next_turn(channel, bot_instance, retries=3):
                     # Store the view reference in state for cancellation
                     state["current_view"] = view
 
-                    # 🔄 REPLACEMENT MAGIC HAPPENS HERE
-                    # We overwrite the GIF URL with the actual Embed and Buttons
                     if rolling_msg:
                         await rolling_msg.edit(content=f"{player.mention}", embed=embed, view=view)
-                        rolling_msg = None  # Consume the variable so the Resumen button works normally
+                        card_msg = rolling_msg
+                        rolling_msg = None
                     else:
-                        await channel.send(f"{player.mention}", embed=embed, view=view)
+                        card_msg = await channel.send(f"{player.mention}", embed=embed, view=view)
 
                     await view.wait()
 
@@ -347,6 +347,23 @@ async def next_turn(channel, bot_instance, retries=3):
                 # Immediately abort outer loop processing if canceled
                 if not state.get("active", True):
                     return
+
+                # === FIX: STATIC TEXT UPDATE FOR MOBILE AND COUNT-UP AVOIDANCE ===
+                if view.value is None:
+                    embed.description = f"*(Ronda {state['round']})* - **Expiró el tiempo**"
+                    embed.color = 0x95a5a6
+                    for child in view.children:
+                        child.disabled = True
+                else:
+                    embed.description = f"*(Ronda {state['round']})* - **Decisión tomada**"
+
+                try:
+                    if card_msg:
+                        await card_msg.edit(embed=embed, view=view)
+                except Exception as e:
+                    logger.debug(f"Failed to edit card_msg to static text: {e}")
+
+                    # --- PROCESS RESULT ---
 
                 # --- PROCESS RESULT ---
                 if view.value == "REROLL":
