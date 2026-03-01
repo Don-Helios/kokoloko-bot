@@ -65,7 +65,7 @@ async def next_turn(channel, bot_instance, retries=3):
 
                                 # ---> THE FIX: Pace the API requests to prevent Rate-Limiting <---
                                 await asyncio.sleep(2)
-                                logger.info(f"Sent final DM to {player_obj.display_name}: {e}")
+                                logger.info(f"Sent final DM to {player_obj.display_name}")
 
                     state["active"] = False
                     print("🏁 [ENGINE] Draft Complete.")
