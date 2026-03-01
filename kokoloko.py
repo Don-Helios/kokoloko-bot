@@ -111,6 +111,11 @@ async def cancel_draft(ctx):
     logic.draft_state["current_index"] = 9999
     logic.draft_state["round"] = 9999
 
+    # === NEW: KILL RUNNING TIMERS IMMEDIATELY ===
+    current_view = logic.draft_state.get("current_view")
+    if current_view:
+        current_view.stop()
+
     logger.critical(f"🛑 DRAFT FORCEFULLY CANCELLED BY {ctx.author}")
     await ctx.send(views.MSG.get("draft_cancelled", "🛑 Draft Cancelled."))
 

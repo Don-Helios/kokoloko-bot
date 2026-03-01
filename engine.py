@@ -22,9 +22,6 @@ async def next_turn(channel, bot_instance, retries=3):
         # =========================================
         # 1. ROUND MANAGEMENT
         # =========================================
-        # =========================================
-        # 1. ROUND MANAGEMENT
-        # =========================================
         if state["current_index"] >= len(state["order"]):
             if state["round"] >= config.TOTAL_POKEMON:
                 if state["active"]:
@@ -212,9 +209,16 @@ async def next_turn(channel, bot_instance, retries=3):
             embed_start = views.create_roll_embed(player, pick_num, expiry_roll, views.format_odds_grid(odds))
             roll_view = views.RollView(player)
 
+            # Store the view reference in state for cancellation
+            state["current_view"] = roll_view
+
             start_msg = await channel.send(f"{player.mention}", embed=embed_start, view=roll_view)
 
             await roll_view.wait()
+
+            # Abort if the draft was canceled while waiting
+            if not state.get("active", True):
+                return
 
             if not roll_view.clicked:
                 logger.info(f"Timeout on Roll Phase for {player.display_name}. Auto-rolling.")
@@ -250,6 +254,12 @@ async def next_turn(channel, bot_instance, retries=3):
                 # Send the rolling GIF and save the message object
                 rolling_msg = await channel.send("https://24.media.tumblr.com/tumblr_lm4usrayvJ1qa9qygo1_500.gif")
                 await asyncio.sleep(5)  # 5-second suspense delay!
+
+                # Check if canceled during the animation
+                if not state.get("active", True):
+                    if rolling_msg:
+                        await rolling_msg.delete()
+                    return
 
                 # === EASTER EGG LOGIC ===
                 if tier <= 60 and random.random() < config.FAKE_OUT_CHANCE:
@@ -306,6 +316,9 @@ async def next_turn(channel, bot_instance, retries=3):
                                                         state['round'], expiry_dec, sprite_url)
                     view = views.DraftView(player, show_summary=not summary_used_this_turn)
 
+                    # Store the view reference in state for cancellation
+                    state["current_view"] = view
+
                     # 🔄 REPLACEMENT MAGIC HAPPENS HERE
                     # We overwrite the GIF URL with the actual Embed and Buttons
                     if rolling_msg:
@@ -315,6 +328,10 @@ async def next_turn(channel, bot_instance, retries=3):
                         await channel.send(f"{player.mention}", embed=embed, view=view)
 
                     await view.wait()
+
+                    # Abort if the draft was canceled while waiting
+                    if not state.get("active", True):
+                        return
 
                     if view.value == "SUMMARY":
                         summary_used_this_turn = True
@@ -326,6 +343,10 @@ async def next_turn(channel, bot_instance, retries=3):
                         continue
 
                     break
+
+                # Immediately abort outer loop processing if canceled
+                if not state.get("active", True):
+                    return
 
                 # --- PROCESS RESULT ---
                 if view.value == "REROLL":
