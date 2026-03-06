@@ -56,7 +56,7 @@ TIER_PROBS = {
 STAFF_ROLE_NAME = "NPO-Draft Staff"
 
 # --- EASTER EGGS ---
-# 0.032 = 3.2% Chance for Delibird Fake Out to trigger on a pull of Tier 60 or less.
+# Chance for Delibird Fake Out to trigger on a pull of Tier 60 or less.
 FAKE_OUT_CHANCE = 0.13
 
 # ==========================================

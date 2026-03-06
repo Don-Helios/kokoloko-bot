@@ -29,14 +29,14 @@ async def next_turn(channel, bot_instance, retries=3):
                     await channel.send(views.MSG["draft_complete"])
                     for embed in views.create_summary_embed(state):
                         await channel.send(embed=embed)
-
-                    # 2. 📢 ANNOUNCE ROUND 10 (FINAL) TO PARENT CHANNEL
-                    try:
-                        await channel.parent.send(views.MSG.get("announce_draft_complete_parent", "🏁 **¡El Kokoloko Draft ha concluido!** Equipos finales:"))
-                        for embed in views.create_summary_embed(state):
-                            await channel.parent.send(embed=embed)
-                    except Exception as e:
-                        logger.error(f"Failed to send final summary to parent: {e}")
+#SILENCING ANNOUNCEMENT TEST
+#                    # 2. 📢 ANNOUNCE ROUND 10 (FINAL) TO PARENT CHANNEL
+#                    try:
+#                        await channel.parent.send(views.MSG.get("announce_draft_complete_parent", "🏁 **¡El Kokoloko Draft ha concluido!** Equipos finales:"))
+#                        for embed in views.create_summary_embed(state):
+#                            await channel.parent.send(embed=embed)
+#                    except Exception as e:
+#                        logger.error(f"Failed to send final summary to parent: {e}")
 
                     # 3. Process final direct messages for all unique participants
                     seen_players = set()
@@ -80,19 +80,19 @@ async def next_turn(channel, bot_instance, retries=3):
             if mode != 2:
                 # Announce the start of the new round in the thread
                 await channel.send(views.MSG["end_of_round"].format(round_num=state['round']))
-
-                # 📢 ANNOUNCE EVEN ROUNDS (2, 4, 6, 8) TO PARENT CHANNEL
+# SILENCING ANNOUNCEMENT TEST
+#                # 📢 ANNOUNCE EVEN ROUNDS (2, 4, 6, 8) TO PARENT CHANNEL
                 finished_round = state["round"] - 1
                 if finished_round % 2 == 0:
                     logger.info(f"Sending global auto-summary to parent channel for end of Round {finished_round}")
-                    try:
-                        await channel.parent.send(views.MSG["announce_round_summary"].format(round_num=finished_round))
-                        for embed in views.create_summary_embed(state):
-                            await channel.parent.send(embed=embed)
-                    except discord.Forbidden:
-                        logger.warning("Could not send summary to parent channel (Permissions missing).")
-                    except Exception as e:
-                        logger.error(f"Failed to send round summary to parent: {e}")
+#                    try:
+#                        await channel.parent.send(views.MSG["announce_round_summary"].format(round_num=finished_round))
+#                        for embed in views.create_summary_embed(state):
+#                            await channel.parent.send(embed=embed)
+#                    except discord.Forbidden:
+#                        logger.warning("Could not send summary to parent channel (Permissions missing).")
+#                    except Exception as e:
+#                        logger.error(f"Failed to send round summary to parent: {e}")
 
                 logger.info(f"--- STARTING ROUND {state['round']} ---")
                 await asyncio.sleep(1)
