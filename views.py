@@ -36,7 +36,7 @@ MSG = {
 
     # --- Engine.py (Game Flow & Turns) ---
     "draft_complete": "🏁 **¡Draft Finalizado!**",
-    "end_of_round": "🔁 **¡Fin de la ronda!** Orden para la ronda {round_num}...",
+    "end_of_round": "🔁 **¡Fin de la ronda!**",
     "err_critical_pool": "⚠️ **ERROR:** No hay Pokémon válidos.",
     "roll_timeout": "⏰ **Tiempo agotado** - Lanzamiento automático...",
     "rolling": "**Rolling...** 🎰\n\n**Probabilidades:**\n{odds}",
