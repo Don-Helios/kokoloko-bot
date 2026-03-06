@@ -180,14 +180,14 @@ async def start_draft(ctx, *members: discord.Member):
         ping_text = role_to_ping.mention if role_to_ping else f"@{config.PING_ROLE_NAME}"
 
         announcement_msg = views.MSG["announce_parent"].format(thread_mention=ctx.channel.mention, ping_text=ping_text)
-#SILENCING ANNOUNCEMENT TEST
-#        try:
-#            await ctx.channel.parent.send(announcement_msg)
-#            logger.info(f"[Draft ID: {draft_id}] Announcement sent to parent channel: {ctx.channel.parent.name}")
-#        except discord.Forbidden:
-#            logger.error(f"[Draft ID: {draft_id}] Failed to announce: Bot lacks 'Send Messages' permission in the parent channel.")
-#        except Exception as e:
-#            logger.error(f"[Draft ID: {draft_id}] Failed to send announcement: {e}")
+#SILENCING ANNOUNCEMENT TEST <-COMMENT UNTIL logger.error(f"[Draft ID: {draft_id}] Failed to send announcement: {e}") to silence again
+        try:
+            await ctx.channel.parent.send(announcement_msg)
+            logger.info(f"[Draft ID: {draft_id}] Announcement sent to parent channel: {ctx.channel.parent.name}")
+        except discord.Forbidden:
+            logger.error(f"[Draft ID: {draft_id}] Failed to announce: Bot lacks 'Send Messages' permission in the parent channel.")
+        except Exception as e:
+            logger.error(f"[Draft ID: {draft_id}] Failed to send announcement: {e}")
 
         # Extract the names and format them as a numbered vertical list
         names_list = "\n".join([f"**{i + 1}.** {p.display_name}" for i, p in enumerate(final)])

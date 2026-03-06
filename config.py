@@ -63,9 +63,9 @@ FAKE_OUT_CHANCE = 0.13
 # 🧵 THREAD & ANNOUNCEMENT SETTINGS
 # ==========================================
 # The exact name of the thread where the bot is allowed to operate.
-THREAD_NAME = "Test 2"
+THREAD_NAME = "Kokoloko-Draft"
 # The exact name of the role to ping when a draft starts.
-PING_ROLE_NAME = "Drat"
+PING_ROLE_NAME = "Draft"
 
 # ==========================================
 # 📝 LOGGING SETTINGS

@@ -9,9 +9,9 @@ from PIL import Image
 
 logger = logging.getLogger("views")
 
-# ==========================================
+# =========================================
 # 💬 CENTRALIZED TEXT DICTIONARY (TRANSLATE HERE)
-# ==========================================
+# =========================================
 # All plain text messages sent by the bot are stored here.
 # Centralizing this makes it much easier to change the bot's language or tone
 # later without having to hunt through the logical loops.
