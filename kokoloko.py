@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import asyncio
 import config
 import logic
 import views
@@ -188,9 +189,13 @@ async def start_draft(ctx, *members: discord.Member):
 #        except Exception as e:
 #            logger.error(f"[Draft ID: {draft_id}] Failed to send announcement: {e}")
 
-        # Extract the names in their newly randomized order
-        names = ", ".join([p.display_name for p in final])
-        await ctx.send(views.MSG["draft_started"].format(draft_id=draft_id, names=names))
+        # Extract the names and format them as a numbered vertical list
+        names_list = "\n".join([f"**{i + 1}.** {p.display_name}" for i, p in enumerate(final)])
+        await ctx.send(views.MSG["draft_started"].format(draft_id=draft_id, names=names_list))
+
+        # 👇 GIVE EVERYONE 10 SECONDS TO READ THE LIST 👇
+        await asyncio.sleep(10)
+
     else:
         logger.info(f"🏆 [Draft ID: {draft_id}] [SILENT] Started")
 

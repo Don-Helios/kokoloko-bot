@@ -28,7 +28,7 @@ MSG = {
     "setup_mode_title": "🔧 Modo",
     "setup_mode_desc": "Selecciona el modo:",
     "announce_parent": "📢 ¡El Kokoloko Draft acaba de iniciar! Entra en el hilo {thread_mention} para ver la selección || {ping_text} ||",
-    "draft_started": "🏆 **¡Draft iniciado!** (ID: `{draft_id}`)\nOrden: {names}",
+    "draft_started": "🏆 **¡Draft iniciado!** (ID: `{draft_id}`)\n\n**Orden Inicial:**\n{names}",
     "err_draft_active": "🚫 ¡Ya hay un draft en curso! Usa `!cancel_draft` para detenerlo primero.",
     "draft_cancelled": "🛑 **El draft ha sido cancelado forzosamente por un administrador.**",
     "err_no_active_draft": "⚠️ No hay ningún draft activo en este momento.",
